@@ -242,3 +242,10 @@ create policy "borrar recibos" on storage.objects for delete using (bucket_id = 
 
 -- ---------- tiempo real ----------
 alter publication supabase_realtime add table public.maquinas, public.lecturas, public.viajes, public.entradas, public.gastos, public.fijos, public.vencimientos, public.rev_items, public.revisiones, public.trabajos, public.facturas, public.temas, public.equipos, public.barcos;
+
+-- ---------- permisos de la API (el proyecto no expone tablas nuevas automáticamente) ----------
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on all tables in schema public to authenticated;
+revoke all on public.invitaciones from authenticated;
+grant select, insert, delete on public.invitaciones to authenticated;
+grant execute on function public.rol_en(uuid), public.es_miembro(uuid), public.puede_gestionar(uuid), public.ve_finanzas(uuid) to authenticated;

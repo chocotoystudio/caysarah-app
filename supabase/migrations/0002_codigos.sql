@@ -30,7 +30,7 @@ begin
 end $$;
 
 create or replace function public.es_anonimo() returns boolean
-language sql stable as $$ select coalesce((auth.jwt() ->> 'is_anonymous')::boolean, false) $$;
+language sql stable set search_path = '' as $$ select coalesce((auth.jwt() ->> 'is_anonymous')::boolean, false) $$;
 
 create or replace function public.crear_codigo(p_barco uuid, p_puesto text, p_rol public.rol)
 returns public.codigos language plpgsql security definer set search_path = public as $$

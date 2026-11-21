@@ -2,7 +2,7 @@
 import { supabase } from "./supabase.js";
 import { newId } from "./store.js";
 
-let USER = {}, EQUIPO = { miembros: [], invitaciones: [] };
+let USER = {}, EQUIPO = { miembros: [], codigos: [] };
 const ROLES = { dueno: "Dueño", capitan: "Capitán", tripulacion: "Tripulación" };
 const HOOKS = { salir() {}, cambiar() {} };
 const put = (t, o) => db.put(t, o);
@@ -305,11 +305,13 @@ function vAjustes(){const b=X().barco||{};
       <div class="setrow"><div><b>Sincronización</b><small>${STATUS.online?"Con señal":"Sin señal"} · ${STATUS.pending?STATUS.pending+" cambios por enviar":"todo enviado"}${STATUS.lastSync?" · "+STATUS.lastSync.toLocaleTimeString("es-VE",{hour:"2-digit",minute:"2-digit"}):""}</small></div><button class="btn sm" data-act="sync">Sincronizar</button></div>
       <div class="setrow"><div><b>Exportar a Excel</b><small>Viajes, bitácora, gastos, máquinas y revisiones</small></div><button class="btn sm" data-act="xls" >Descargar</button></div>
     </div></section>
-    ${ROL==="dueno"?`<section class="card"><div class="ch"><div><h2>Personas con acceso</h2><p class="sub">El capitán y la tripulación entran con su correo</p></div><button class="btn sm" data-minv="1">Invitar</button></div>
-      ${(EQUIPO.miembros||[]).map(m=>`<div class="vc"><div>${esc(m.nombre||m.email||"Miembro")}<small>${ROLES[m.rol]||m.rol}${m.userId===USER.id?" · tú":""}</small></div>${m.userId!==USER.id?`<button class="link danger" data-mdel="${esc(m.userId)}">Quitar</button>`:""}</div>`).join("")}
-      ${(EQUIPO.invitaciones||[]).map(i=>`<div class="vc"><div>${esc(i.email)}<small>Invitado como ${ROLES[i.rol]||i.rol} · pendiente</small></div><button class="link danger" data-idel="${esc(i.id)}">Cancelar</button></div>`).join("")}
+    ${ROL==="dueno"?`<section class="card"><div class="ch"><div><h2>Accesos del equipo</h2><p class="sub">Cada puesto entra con su código, sin correo. Si cambia la persona, cambia el código: quien sale pierde el acceso y los datos quedan en el barco.</p></div><button class="btn sm" data-cnew="1">Nuevo acceso</button></div>
+      ${(EQUIPO.codigos||[]).length?[...EQUIPO.codigos].sort((a,b)=>({dueno:0,capitan:1,tripulacion:2}[a.rol]-{dueno:0,capitan:1,tripulacion:2}[b.rol])).map(c=>{const dev=EQUIPO.miembros.filter(m=>m.codigoId===c.id);return `<div class="vc acc"><div><span class="vt">${esc(c.puesto)}${EQUIPO.miembros.some(m=>m.codigoId===c.id&&m.userId===USER.id)?" · tu acceso":""}</span><small>${ROLES[c.rol]||c.rol} · ${dev.length?dev.length+(dev.length===1?" teléfono":" teléfonos"):"nadie ha entrado aún"} · código desde ${new Date(c.rotado_at).toLocaleDateString("es-VE",{day:"numeric",month:"short"})}</small><code class="cod">${esc(c.codigo)}</code>${dev.length?`<div class="devs">${dev.map(m=>`<span class="chip">${esc(m.nombre||"sin nombre")}${m.userId!==USER.id?`<button class="link danger" data-mdel="${esc(m.userId)}" aria-label="Quitar acceso a ${esc(m.nombre||"este teléfono")}">Quitar</button>`:" · tú"}</span>`).join("")}</div>`:""}</div>
+        <span class="accb"><button class="link" data-ccopy="${esc(c.codigo)}">Copiar</button><button class="link" data-crot="${esc(c.id)}">Cambiar código</button><button class="link danger" data-cdel="${esc(c.id)}">Eliminar</button></span></div>`}).join(""):`<p class="hint">Crea un acceso para el capitán y otro para la tripulación.</p>`}
+      <p class="hint">Guarda el código de dueño en un lugar seguro. Si se pierde, se puede consultar en el panel de Supabase.</p>
     </section>`:""}
-    <section class="card"><div class="ch"><h2>Tu cuenta</h2></div><div class="vc"><div>${esc(USER.email||"")}<small>${ROLES[ROL]||ROL} en ${esc(S.barco.nombre||"el barco")}</small></div><span style="display:flex;gap:12px"><button class="link" data-cambiar="1">Cambiar de barco</button><button class="link danger" data-salir="1">Cerrar sesión</button></span></div></section>
+
+    <section class="card"><div class="ch"><h2>Tu cuenta</h2></div><div class="vc"><div>${esc(USER.email||USER.nombre||"")}<small>${USER.anonimo?"Acceso por código · ":""}${ROLES[ROL]||ROL} en ${esc(S.barco.nombre||"el barco")}</small></div><span style="display:flex;gap:12px"><button class="link" data-cambiar="1">Cambiar de barco</button><button class="link danger" data-salir="1">Cerrar sesión</button></span></div></section>
   </div>`}
 
 /* ================= diálogo genérico ================= */
@@ -465,9 +467,11 @@ document.addEventListener("click",e=>{const g=e.target.closest("[data-go]");if(g
   if(t.dataset.qv){qView=t.dataset.qv;render();return}
   if(t.dataset.recibo||t.dataset.file){t.dataset.recibo=t.dataset.recibo||t.dataset.file;}
   if(t.dataset.recibo){const w=window.open("","_blank");db.signedUrl(t.dataset.recibo).then(u=>{if(w)w.location=u;else location.href=u}).catch(()=>{if(w)w.close();toast("El recibo se verá cuando haya señal.")})}
-  if(t.dataset.minv)invitar();
+  if(t.dataset.cnew)nuevoAcceso();
+  if(t.dataset.ccopy){const c=t.dataset.ccopy;(navigator.clipboard?navigator.clipboard.writeText(c):Promise.reject()).then(()=>toast("Código copiado: "+c),()=>toast("Código: "+c))}
+  if(t.dataset.crot)rotarAcceso(t.dataset.crot);
+  if(t.dataset.cdel)eliminarAcceso(t.dataset.cdel);
   if(t.dataset.mdel)quitarMiembro(t.dataset.mdel);
-  if(t.dataset.idel)quitarInvitacion(t.dataset.idel);
   if(t.dataset.salir)HOOKS.salir();
   if(t.dataset.cambiar)HOOKS.cambiar();
   if(t.dataset.tclose)closeTrip(t.dataset.tclose);
@@ -496,13 +500,19 @@ async function comprimir(file){try{const img=await createImageBitmap(file);const
 async function subirArchivo(file,dir){const img=/^image\//.test(file.type);const blob=img?await comprimir(file):file;const ext=img?"jpg":(file.name.split(".").pop()||"pdf").toLowerCase().replace(/[^a-z0-9]/g,"");const path=S.barco.id+"/"+dir+"/"+newId()+"."+ext;await db.upload(path,blob,img?"image/jpeg":file.type||"application/pdf");return path}
 const subirRecibo=file=>subirArchivo(file,"fin");
 async function cargarEquipo(){if(ROL!=="dueno"||!navigator.onLine)return;
-  const[{data:m},{data:i}]=await Promise.all([supabase.from("miembros").select("*").eq("barco_id",S.barco.id),supabase.from("invitaciones").select("*").eq("barco_id",S.barco.id)]);
-  EQUIPO={miembros:(m||[]).map(x=>({userId:x.user_id,rol:x.rol,nombre:x.nombre})),invitaciones:i||[]};render()}
-function invitar(){dialog("Invitar a la bitácora",[{k:"email",l:"Correo",t:"email",full:1,req:1},{k:"nombre",l:"Nombre",full:1},{k:"rol",l:"Rol",t:"select",o:[{v:"capitan",l:"Capitán: registra todo y ve finanzas"},{v:"tripulacion",l:"Tripulación: registra, sin finanzas"},{v:"dueno",l:"Dueño: acceso total"}],full:1},
-  {hint:"Cuando esa persona entre con este correo, verá el barco automáticamente."}],{rol:"capitan"},async o=>{const{error}=await supabase.from("invitaciones").insert({barco_id:S.barco.id,email:o.email.toLowerCase(),rol:o.rol,nombre:o.nombre});
-  if(error){toast(error.code==="23505"?"Ese correo ya está invitado.":"No se pudo invitar: "+error.message);return}toast("Invitación guardada. Pídele que entre con "+o.email);cargarEquipo()},"Invitar")}
+  const[{data:m},{data:c}]=await Promise.all([supabase.from("miembros").select("*").eq("barco_id",S.barco.id),supabase.from("codigos").select("*").eq("barco_id",S.barco.id).order("created_at")]);
+  EQUIPO={miembros:(m||[]).map(x=>({userId:x.user_id,rol:x.rol,nombre:x.nombre,codigoId:x.codigo_id})),codigos:c||[]};render()}
+function nuevoAcceso(){if(!navigator.onLine){toast("Necesitas señal para crear accesos.");return}
+  dialog("Nuevo acceso",[{k:"puesto",l:"Puesto",full:1,req:1,ph:"Ej. Capitán, Marinero, Tripulación"},{k:"rol",l:"Permisos",t:"select",full:1,o:[{v:"capitan",l:"Capitán: registra todo y ve finanzas"},{v:"tripulacion",l:"Tripulación: registra, sin finanzas"},{v:"dueno",l:"Dueño: acceso total, incluidos los códigos"}]},
+  {hint:"Se genera un código de 8 caracteres. Compártelo solo con quien ocupa ese puesto."}],{rol:"capitan"},async o=>{const{data,error}=await supabase.rpc("crear_codigo",{p_barco:S.barco.id,p_puesto:o.puesto,p_rol:o.rol});
+  if(error){toast("No se pudo crear: "+error.message);return}toast("Acceso creado. Código: "+(data?.codigo||""));cargarEquipo()},"Crear acceso")}
+function rotarAcceso(id){const c=EQUIPO.codigos.find(x=>x.id===id);if(!c)return;if(!navigator.onLine){toast("Necesitas señal para cambiar el código.");return}
+  dialog("Cambiar código de "+c.puesto,[{hint:"Se genera un código nuevo y los demás teléfonos que entraron con el actual pierden el acceso al instante"+(c.rol==="dueno"?" (este teléfono sigue dentro)":"")+". Todo lo registrado se queda en el barco."}],{},async()=>{const{data,error}=await supabase.rpc("rotar_codigo",{p_id:id});
+  if(error){toast("No se pudo cambiar: "+error.message);return}toast("Nuevo código: "+data);cargarEquipo()},"Cambiar código")}
+function eliminarAcceso(id){const c=EQUIPO.codigos.find(x=>x.id===id);if(!c)return;if(!navigator.onLine){toast("Necesitas señal para eliminar accesos.");return}
+  dialog("Eliminar acceso "+c.puesto,[{hint:"El código deja de funcionar y quien entró con él pierde el acceso. Lo registrado se queda en el barco."}],{},async()=>{const{error}=await supabase.rpc("eliminar_codigo",{p_id:id});
+  toast(error?(/al menos/.test(error.message)?"Debe quedar al menos un acceso de dueño.":"No se pudo eliminar."):"Acceso eliminado");cargarEquipo()},"Eliminar")}
 async function quitarMiembro(uid){const{error}=await supabase.from("miembros").delete().eq("barco_id",S.barco.id).eq("user_id",uid);toast(error?"No se pudo quitar.":"Acceso retirado");cargarEquipo()}
-async function quitarInvitacion(id){const{error}=await supabase.from("invitaciones").delete().eq("id",id);toast(error?"No se pudo cancelar.":"Invitación cancelada");cargarEquipo()}
 
 function pintarEstado(){const d=$("#sDot"),t=$("#sTxt");if(!d)return;
   if(!STATUS.online){d.className="dot off";t.textContent=STATUS.pending?"Sin señal · "+STATUS.pending+" por enviar":"Sin señal"}

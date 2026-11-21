@@ -1,8 +1,9 @@
-// Arranque: sesión por correo (código de 6 dígitos o enlace), elección de barco y montaje de la app.
+// Arranque: cada puesto (dueño, capitán, tripulación) entra con su código, sin correo, elección de barco y montaje de la app.
 import "./styles.css";
 import { supabase, configured } from "./supabase.js";
 import { createStore } from "./store.js";
 import { registerSW } from "virtual:pwa-register";
+import { clear as idbClear } from "idb-keyval";
 
 registerSW({ immediate: true });
 
@@ -23,65 +24,66 @@ if (!configured) {
 
 async function boot() {
   const { data } = await supabase.auth.getSession();
-  if (!data.session) return login();
+  let aviso = "";
+  try { aviso = sessionStorage.getItem("cs_aviso") || ""; sessionStorage.removeItem("cs_aviso"); } catch (e) {}
+  if (!data.session) return login(aviso);
   return elegirBarco(data.session.user);
 }
 
-function login(email = "") {
+function login(aviso = "") {
   screen(`<span class="eyebrow">Bitácora de a bordo</span><h1>Entrar</h1>
-    <p>Escribe tu correo. Te enviaremos un código para entrar, sin contraseña.</p>
-    <form id="fMail" class="gf"><label for="em">Correo</label><input id="em" type="email" required autocomplete="email" inputmode="email" value="${esc(email)}" placeholder="capitan@correo.com">
-    <button class="btn pri" type="submit">Enviarme el código</button><p class="err" id="err" hidden></p></form>`);
-  $("#fMail").onsubmit = async (e) => {
+    <p>Escribe el código de tu puesto. Te lo da el dueño del barco.</p>
+    ${aviso ? `<p class="err">${esc(aviso)}</p>` : ""}
+    <form id="fPuesto" class="gf"><label for="pc">Código de acceso</label><input id="pc" required autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12" placeholder="XXXX-XXXX" style="text-transform:uppercase;letter-spacing:.12em">
+    <label for="pn">Tu nombre</label><input id="pn" required autocomplete="name" placeholder="Ej. Victor Narváez">
+    <button class="btn pri" type="submit">Entrar</button><p class="err" id="err" hidden></p></form>`);
+  $("#fPuesto").onsubmit = async (e) => {
     e.preventDefault();
-    const em = $("#em").value.trim().toLowerCase();
-    const b = e.submitter;
+    const b = e.submitter, err = $("#err");
+    const fallo = (t) => { err.hidden = false; err.textContent = t; b.disabled = false; b.textContent = "Entrar"; };
+    if (!navigator.onLine) return fallo("Necesitas señal para entrar la primera vez. Después funciona sin señal.");
     b.disabled = true;
-    b.textContent = "Enviando…";
-    const { error } = await supabase.auth.signInWithOtp({ email: em, options: { emailRedirectTo: location.origin + location.pathname } });
-    if (error) {
-      $("#err").hidden = false;
-      $("#err").textContent = /rate/i.test(error.message) ? "Espera un minuto antes de pedir otro código." : "No se pudo enviar el correo: " + error.message;
-      b.disabled = false;
-      b.textContent = "Enviarme el código";
-      return;
+    b.textContent = "Entrando…";
+    let { data } = await supabase.auth.getSession();
+    if (!data.session) {
+      const r = await supabase.auth.signInAnonymously();
+      if (r.error) return fallo("No se pudo abrir la sesión: " + r.error.message);
+      data = { session: r.data.session };
     }
-    codigo(em);
+    const { error } = await supabase.rpc("canjear_codigo", { p_codigo: $("#pc").value, p_nombre: $("#pn").value.trim() });
+    if (error) return fallo(/no válido/i.test(error.message) ? "Ese código no existe o ya fue cambiado. Pídele el código vigente al dueño." : "No se pudo entrar: " + error.message);
+    elegirBarco(data.session.user);
   };
 }
 
-function codigo(em) {
-  screen(`<span class="eyebrow">Revisa tu correo</span><h1>Escribe el código</h1>
-    <p>Lo enviamos a <b>${esc(em)}</b>. También puedes tocar el enlace del correo desde este mismo teléfono.</p>
-    <form id="fCode" class="gf"><label for="cd">Código</label><input id="cd" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,8}" maxlength="8" required placeholder="123456">
-    <button class="btn pri" type="submit">Entrar</button><p class="err" id="err" hidden></p>
-    <button class="link" type="button" id="otro">Usar otro correo</button></form>`);
-  $("#otro").onclick = () => login(em);
-  $("#fCode").onsubmit = async (e) => {
-    e.preventDefault();
-    const { data, error } = await supabase.auth.verifyOtp({ email: em, token: $("#cd").value.trim(), type: "email" });
-    if (error) {
-      $("#err").hidden = false;
-      $("#err").textContent = "El código no es válido o ya venció. Pide uno nuevo.";
-      return;
-    }
-    elegirBarco(data.user);
-  };
+// borra todo lo guardado en el teléfono (datos del barco, cola de cambios y sesión)
+async function limpiar() {
+  try { await idbClear(); } catch (e) {}
+  try { ["cs_barcos", LAST, "cs2_view"].forEach((k) => localStorage.removeItem(k)); } catch (e) {}
 }
 
 async function salir() {
   await supabase.auth.signOut();
-  try { localStorage.removeItem(LAST); } catch (e) {}
+  await limpiar();
+  location.reload();
+}
+
+const esAnonimo = (u) => Boolean(u?.is_anonymous);
+
+// acceso retirado: el dueño cambió el código o quitó a la persona. Se borra todo del teléfono.
+async function revocado() {
+  await supabase.auth.signOut().catch(() => {});
+  await limpiar();
+  try { sessionStorage.setItem("cs_aviso", "Tu acceso a este barco cambió. Pide el código vigente al dueño."); } catch (e) {}
   location.reload();
 }
 
 async function elegirBarco(user, forzar = false) {
   let lista = null;
   if (navigator.onLine) {
-    await supabase.rpc("aceptar_invitaciones");
-    const { data, error } = await supabase.from("miembros").select("rol, barcos(*)").eq("user_id", user.id);
+    const { data, error } = await supabase.from("miembros").select("rol, nombre, barcos(*)").eq("user_id", user.id);
     if (!error) {
-      lista = data.filter((m) => m.barcos).map((m) => ({ ...m.barcos, rol: m.rol }));
+      lista = data.filter((m) => m.barcos).map((m) => ({ ...m.barcos, rol: m.rol, miNombre: m.nombre }));
       try { localStorage.setItem("cs_barcos", JSON.stringify(lista)); } catch (e) {}
     }
   }
@@ -93,26 +95,10 @@ async function elegirBarco(user, forzar = false) {
   const elegido = !forzar && (lista.find((b) => b.id === last) || (lista.length === 1 ? lista[0] : null));
   if (elegido) return abrir(user, elegido);
   if (!lista.length) {
-    screen(`<span class="eyebrow">${esc(user.email)}</span><h1>Aún no tienes un barco</h1>
-      <p>Si eres capitán o tripulante, pide al dueño que te invite con este correo y vuelve a entrar.</p>
-      <p>Si eres el dueño, crea la bitácora de tu barco:</p>
-      <form id="fNew" class="gf"><label for="bn">Nombre del barco</label><input id="bn" required value="Cay Sarah">
-      <button class="btn pri" type="submit">Crear bitácora</button><p class="err" id="err" hidden></p></form>
-      <button class="link" id="out">Cerrar sesión</button>`);
-    $("#out").onclick = salir;
-    $("#fNew").onsubmit = async (e) => {
-      e.preventDefault();
-      const { error } = await supabase.rpc("crear_barco", { p_nombre: $("#bn").value.trim(), p_puerto: "Puerto La Cruz" });
-      if (error) {
-        $("#err").hidden = false;
-        $("#err").textContent = "No se pudo crear: " + error.message;
-        return;
-      }
-      elegirBarco(user, false);
-    };
-    return;
+    if (navigator.onLine) return revocado();
+    return login("Necesitas señal para comprobar tu acceso.");
   }
-  screen(`<span class="eyebrow">${esc(user.email)}</span><h1>Elige el barco</h1><div class="blist">${lista
+  screen(`<span class="eyebrow">${esc(user.email || "")}</span><h1>Elige el barco</h1><div class="blist">${lista
     .map((b) => `<button class="qa" data-b="${esc(b.id)}"><span>${esc(b.nombre)}<small>${ROLES[b.rol] || b.rol}${b.puerto ? " · " + esc(b.puerto) : ""}</small></span></button>`)
     .join("")}</div><button class="link" id="out">Cerrar sesión</button>`);
   $("#out").onclick = salir;
@@ -123,10 +109,23 @@ async function abrir(user, barco) {
   try { localStorage.setItem(LAST, barco.id); } catch (e) {}
   document.body.classList.remove("gate");
   $("#gate").hidden = true;
-  const ctx = { rol: barco.rol, user: { id: user.id, email: user.email }, salir, cambiar: () => { try { localStorage.removeItem(LAST); } catch (e) {} location.reload(); } };
+  const ctx = { rol: barco.rol, user: { id: user.id, email: user.email || "", nombre: barco.miNombre || "", anonimo: esAnonimo(user) }, salir, cambiar: () => { try { localStorage.removeItem(LAST); } catch (e) {} location.reload(); } };
   const store = createStore(barco, (S, st) => ctx.onChange && ctx.onChange(S, st));
   const { mount } = await import("./app.js");
   await mount(store, ctx);
+  vigilarAcceso(user, barco);
+}
+
+// comprueba el acceso al volver a la app, al recuperar señal y cada 5 minutos
+function vigilarAcceso(user, barco) {
+  const revisar = async () => {
+    if (!navigator.onLine || document.hidden) return;
+    const { data, error } = await supabase.from("miembros").select("rol").eq("barco_id", barco.id).eq("user_id", user.id);
+    if (!error && Array.isArray(data) && data.length === 0) revocado();
+  };
+  document.addEventListener("visibilitychange", revisar);
+  window.addEventListener("online", revisar);
+  setInterval(revisar, 5 * 60 * 1000);
 }
 
 supabase?.auth.onAuthStateChange((ev, session) => {

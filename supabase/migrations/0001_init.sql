@@ -176,7 +176,7 @@ create table public.equipos (  -- radio y navegación (certificado de seguridad 
 );
 
 -- updated_at automático
-create or replace function public.tocar() returns trigger language plpgsql as $$
+create or replace function public.tocar() returns trigger language plpgsql set search_path = public as $$
 begin new.updated_at := now(); return new; end $$;
 
 do $$ declare t text; begin
@@ -187,47 +187,40 @@ do $$ declare t text; begin
   end loop;
   foreach t in array array['maquinas','lecturas','viajes','entradas','fijos','vencimientos','rev_items','revisiones','trabajos','facturas','temas','equipos'] loop
     execute format('create index on public.%1$s (barco_id)', t);
-    execute format('create policy "leer %1$s" on public.%1$s for select using (public.es_miembro(barco_id))', t);
-    execute format('create policy "crear %1$s" on public.%1$s for insert with check (public.es_miembro(barco_id))', t);
-    -- el borrado lógico es un update: la tripulación no puede marcar borrado
-    execute format('create policy "editar %1$s" on public.%1$s for update using (public.es_miembro(barco_id)) with check (public.es_miembro(barco_id) and (borrado = false or public.puede_gestionar(barco_id)))', t);
-    execute format('create policy "borrar %1$s" on public.%1$s for delete using (public.puede_gestionar(barco_id))', t);
+    execute format('create policy "borrar %1$s" on public.%1$s for delete to authenticated using (public.puede_gestionar(barco_id))', t);
+  end loop;
+  -- operación: todos los miembros leen, crean y editan; el borrado lógico (update) solo dueño y capitán
+  foreach t in array array['maquinas','lecturas','viajes','entradas','vencimientos','rev_items','revisiones','temas','equipos'] loop
+    execute format('create policy "leer %1$s" on public.%1$s for select to authenticated using (public.es_miembro(barco_id))', t);
+    execute format('create policy "crear %1$s" on public.%1$s for insert to authenticated with check (public.es_miembro(barco_id))', t);
+    execute format('create policy "editar %1$s" on public.%1$s for update to authenticated using (public.es_miembro(barco_id)) with check (public.es_miembro(barco_id) and (borrado = false or public.puede_gestionar(barco_id)))', t);
+  end loop;
+  -- finanzas: fijos, trabajos y facturas solo dueño y capitán
+  foreach t in array array['fijos','trabajos','facturas'] loop
+    execute format('create policy "leer %1$s" on public.%1$s for select to authenticated using (public.ve_finanzas(barco_id))', t);
+    execute format('create policy "crear %1$s" on public.%1$s for insert to authenticated with check (public.ve_finanzas(barco_id))', t);
+    execute format('create policy "editar %1$s" on public.%1$s for update to authenticated using (public.ve_finanzas(barco_id)) with check (public.ve_finanzas(barco_id))', t);
   end loop;
 end $$;
 
 -- gastos: todos los miembros registran; solo dueño y capitán los ven y gestionan
 create index on public.gastos (barco_id);
-create policy "leer gastos" on public.gastos for select using (public.ve_finanzas(barco_id) or autor = auth.uid());
-create policy "crear gastos" on public.gastos for insert with check (public.es_miembro(barco_id));
+create policy "leer gastos" on public.gastos for select to authenticated using (public.ve_finanzas(barco_id) or autor = auth.uid());
+create policy "crear gastos" on public.gastos for insert to authenticated with check (public.es_miembro(barco_id));
 -- quien registró un gasto puede corregirlo (no borrarlo); finanzas gestiona todos
-create policy "editar gastos" on public.gastos for update using (public.ve_finanzas(barco_id) or (autor = auth.uid() and public.es_miembro(barco_id)))
+create policy "editar gastos" on public.gastos for update to authenticated using (public.ve_finanzas(barco_id) or (autor = auth.uid() and public.es_miembro(barco_id)))
   with check (public.ve_finanzas(barco_id) or (autor = auth.uid() and public.es_miembro(barco_id) and borrado = false));
-create policy "borrar gastos" on public.gastos for delete using (public.puede_gestionar(barco_id));
--- fijos: solo finanzas
-drop policy "leer fijos" on public.fijos; drop policy "crear fijos" on public.fijos; drop policy "editar fijos" on public.fijos;
-create policy "leer fijos" on public.fijos for select using (public.ve_finanzas(barco_id));
-create policy "crear fijos" on public.fijos for insert with check (public.ve_finanzas(barco_id));
-create policy "editar fijos" on public.fijos for update using (public.ve_finanzas(barco_id)) with check (public.ve_finanzas(barco_id));
--- trabajos y facturas: solo finanzas (dueño y capitán)
-do $$ declare t text; begin
-  foreach t in array array['trabajos','facturas'] loop
-    execute format('drop policy "leer %1$s" on public.%1$s; drop policy "crear %1$s" on public.%1$s; drop policy "editar %1$s" on public.%1$s', t);
-    execute format('create policy "leer %1$s" on public.%1$s for select using (public.ve_finanzas(barco_id))', t);
-    execute format('create policy "crear %1$s" on public.%1$s for insert with check (public.ve_finanzas(barco_id))', t);
-    execute format('create policy "editar %1$s" on public.%1$s for update using (public.ve_finanzas(barco_id)) with check (public.ve_finanzas(barco_id))', t);
-  end loop;
-end $$;
-
+create policy "borrar gastos" on public.gastos for delete to authenticated using (public.puede_gestionar(barco_id));
 -- barcos, miembros, invitaciones
 alter table public.miembros enable row level security;
 alter table public.invitaciones enable row level security;
-create policy "leer barco" on public.barcos for select using (public.es_miembro(id));
-create policy "editar barco" on public.barcos for update using (public.puede_gestionar(id)) with check (public.puede_gestionar(id));
-create policy "leer miembros" on public.miembros for select using (public.es_miembro(barco_id));
-create policy "dueño gestiona miembros" on public.miembros for all using (public.rol_en(barco_id) = 'dueno') with check (public.rol_en(barco_id) = 'dueno');
-create policy "dueño ve invitaciones" on public.invitaciones for select using (public.rol_en(barco_id) = 'dueno');
-create policy "dueño invita" on public.invitaciones for insert with check (public.rol_en(barco_id) = 'dueno');
-create policy "dueño borra invitaciones" on public.invitaciones for delete using (public.rol_en(barco_id) = 'dueno');
+create policy "leer barco" on public.barcos for select to authenticated using (public.es_miembro(id));
+create policy "editar barco" on public.barcos for update to authenticated using (public.puede_gestionar(id)) with check (public.puede_gestionar(id));
+create policy "leer miembros" on public.miembros for select to authenticated using (public.es_miembro(barco_id));
+create policy "dueño gestiona miembros" on public.miembros for all to authenticated using (public.rol_en(barco_id) = 'dueno') with check (public.rol_en(barco_id) = 'dueno');
+create policy "dueño ve invitaciones" on public.invitaciones for select to authenticated using (public.rol_en(barco_id) = 'dueno');
+create policy "dueño invita" on public.invitaciones for insert to authenticated with check (public.rol_en(barco_id) = 'dueno');
+create policy "dueño borra invitaciones" on public.invitaciones for delete to authenticated using (public.rol_en(barco_id) = 'dueno');
 
 grant execute on function public.crear_barco(text, text) to authenticated;
 grant execute on function public.aceptar_invitaciones() to authenticated;
@@ -235,17 +228,17 @@ grant execute on function public.aceptar_invitaciones() to authenticated;
 -- ---------- fotos de recibos ----------
 insert into storage.buckets (id, name, public) values ('recibos', 'recibos', false) on conflict do nothing;
 -- rutas: <barco_id>/fin/<archivo> (recibos y facturas: solo finanzas) y <barco_id>/docs/<archivo> (certificados: todos)
-create policy "ver recibos" on storage.objects for select using (bucket_id = 'recibos' and public.es_miembro(((storage.foldername(name))[1])::uuid)
+create policy "ver recibos" on storage.objects for select to authenticated using (bucket_id = 'recibos' and public.es_miembro(((storage.foldername(name))[1])::uuid)
   and ((storage.foldername(name))[2] is distinct from 'fin' or public.ve_finanzas(((storage.foldername(name))[1])::uuid)));
-create policy "subir recibos" on storage.objects for insert with check (bucket_id = 'recibos' and public.es_miembro(((storage.foldername(name))[1])::uuid));
-create policy "borrar recibos" on storage.objects for delete using (bucket_id = 'recibos' and public.puede_gestionar(((storage.foldername(name))[1])::uuid));
+create policy "subir recibos" on storage.objects for insert to authenticated with check (bucket_id = 'recibos' and public.es_miembro(((storage.foldername(name))[1])::uuid));
+create policy "borrar recibos" on storage.objects for delete to authenticated using (bucket_id = 'recibos' and public.puede_gestionar(((storage.foldername(name))[1])::uuid));
 
 -- ---------- tiempo real ----------
 alter publication supabase_realtime add table public.maquinas, public.lecturas, public.viajes, public.entradas, public.gastos, public.fijos, public.vencimientos, public.rev_items, public.revisiones, public.trabajos, public.facturas, public.temas, public.equipos, public.barcos;
 
 -- ---------- permisos de la API (el proyecto no expone tablas nuevas automáticamente) ----------
 grant usage on schema public to anon, authenticated;
-grant select, insert, update, delete on all tables in schema public to authenticated;
-revoke all on public.invitaciones from authenticated;
+grant select, insert, update, delete on public.barcos, public.miembros, public.maquinas, public.lecturas, public.viajes, public.entradas, public.gastos, public.fijos, public.vencimientos, public.rev_items, public.revisiones, public.trabajos, public.facturas, public.temas, public.equipos to authenticated;
 grant select, insert, delete on public.invitaciones to authenticated;
+
 grant execute on function public.rol_en(uuid), public.es_miembro(uuid), public.puede_gestionar(uuid), public.ve_finanzas(uuid) to authenticated;

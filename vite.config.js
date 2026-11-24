@@ -27,6 +27,7 @@ export default defineConfig({
         // La foto del hero se guarda para verla sin señal; el video (.mp4) no se precarga y se pide solo en línea.
         globPatterns: ["**/*.{js,css,html,svg,png,jpg,woff2}"],
         navigateFallback: "/index.html",
+        importScripts: ["/sw-avisos.js"],
         runtimeCaching: [
           { urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i, handler: "CacheFirst", options: { cacheName: "fuentes", expiration: { maxEntries: 20, maxAgeSeconds: 31536000 } } },
         ],

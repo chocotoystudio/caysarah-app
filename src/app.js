@@ -50,12 +50,17 @@ const ICON={
   barco:I('<path d="M12 3v12"/><path d="M12 4l6 9h-6"/><path d="M3 16h18l-2.5 4h-13z"/>'),
   tema:I('<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.4v.3M12 16.5h.01"/>'),
   nav:I('<path d="M3 17c2 1.5 4 1.5 6 0s4-1.5 6 0 4 1.5 6 0"/><path d="M12 3l5 10H7z"/>'),
+  doc:I('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'),
+  foto:I('<rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="3.5"/><path d="M8 6l1.5-2h5L16 6"/>'),
+  pieza:I('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>'),
+  campana:I('<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>'),
 };
 const TIPO_IC={"Navegación":ICON.nav,"Combustible":ICON.fuel,"Mantenimiento":ICON.mant,"Limpieza":ICON.agua,"Novedad":ICON.nov};
 
 /* ================= estado ================= */
-let S={viajes:[],entradas:[],gastos:[],fijos:[],maquinas:[],lecturas:[],venc:[],items:[],rev:{},trabajos:[],facturas:[],temas:[],equipos:[],barco:{},ready:false};
+let S={viajes:[],entradas:[],gastos:[],fijos:[],maquinas:[],lecturas:[],venc:[],items:[],rev:{},trabajos:[],facturas:[],temas:[],equipos:[],planes:[],barco:{},ready:false};
 let db=null,ROL="dueno",STATUS={online:true,pending:0};
+let fEq="";
 let view="hoy",curM=today().slice(0,7),curW=iso(monday(new Date())),fTipo="",curY=today().slice(0,4);
 const TIPOS=["Navegación","Combustible","Mantenimiento","Limpieza","Novedad"];
 const MQ=["babor","estribor","planta"];
@@ -66,7 +71,32 @@ const CATS=[...new Set(Object.values(SUBS).flat())];
 const AREAS=["Mano de obra","Mecánica","Electrónica","Pintura y fibra","Tapicería","Plomería","Accesorios y estética","Tender","Marina","Logística"];
 const TEMAT=["Pregunta","Problema","Mejora","Pendiente"],PRIO={alta:"Alta",media:"Media",baja:"Baja"};
 const FIN=()=>ROL!=="tripulacion";
-const TIPOV=["Charter","Uso del dueño","Traslado","Prueba o mantenimiento"];
+const TIPOV=["Charter","Uso del dueño","Préstamo","Traslado","Prueba o mantenimiento"];
+const DOCS_ZARPE=["Zarpe","Lista de tripulantes","Lista de pasajeros","Despacho de capitanía","Permiso de navegación","Contrato o acuerdo","Otro"];
+/* mantenimiento por tiempo */
+const UNI={dias:["día","días"],semanas:["semana","semanas"],meses:["mes","meses"],anios:["año","años"]};
+const SISTEMAS=["Seguridad","Climatización","Agua","Casco y propulsión","Eléctrico","Sanitarios","Tender","Cubierta","Otro"];
+const EQUIPOS_BASE=["Desalinizadora","Aire acondicionado","Bomba de agua dulce","Bomba de achique","Sanitarios","Calentador de agua","Baterías","Cargador e inversor","Molinete","Tender","Fuera de borda","Casco","Hélices y ejes","Cocina y nevera","Electrónica","Otro"];
+/* Plan recomendado: intervalos de referencia habituales en barcos de este tipo; cada barco los ajusta según el fabricante y el uso. */
+const PLAN_SUG=[
+  ["Extintores: inspección (manómetro y precinto)","Seguridad",1,"meses",7],
+  ["Extintores: recarga y servicio","Seguridad",12,"meses",30],
+  ["Balsa salvavidas: servicio en estación","Seguridad",12,"meses",45],
+  ["EPIRB: autoprueba","Seguridad",1,"meses",7],
+  ["Chalecos y bengalas: revisión y fechas","Seguridad",6,"meses",15],
+  ["Aires acondicionados: limpieza de filtros de aire","Climatización",1,"meses",7],
+  ["Aires acondicionados: filtro de agua salada","Climatización",1,"meses",7],
+  ["Aires acondicionados: servicio técnico","Climatización",12,"meses",30],
+  ["Desalinizadora: prefiltros","Agua",1,"meses",7],
+  ["Desalinizadora: limpieza de membranas","Agua",12,"meses",30],
+  ["Tanques de agua dulce: limpieza","Agua",12,"meses",30],
+  ["Limpieza de casco (buzo)","Casco y propulsión",1,"meses",7],
+  ["Ánodos de casco y ejes","Casco y propulsión",6,"meses",15],
+  ["Varada y antifouling","Casco y propulsión",12,"meses",45],
+  ["Baterías: prueba de capacidad","Eléctrico",12,"meses",30],
+  ["Inodoros: bombas y válvulas","Sanitarios",6,"meses",15],
+  ["Molinete: limpieza y engrase","Cubierta",6,"meses",15],
+  ["Tender: servicio del fuera de borda","Tender",6,"meses",15]];
 const ZONAS=["Casco y cubierta","Interior","Motores con agua dulce","Tender","Lona y cojines"];
 const DEF_MAQ=[
   {clave:"babor",nombre:"Motor babor",orden:1,tareas:[{t:"Aceite y filtro",cada:250},{t:"Filtros Racor",cada:250},{t:"Impeller agua salada",cada:500},{t:"Ánodos intercambiador",cada:500}]},
@@ -86,6 +116,7 @@ const maqs=()=>[...X().maquinas].sort((a,b)=>(+a.orden||9)-(+b.orden||9));
 const maq=k=>X().maquinas.find(m=>m.clave===k)||{};
 const tripOpen=()=>X().viajes.filter(v=>v.estado!=="Cerrado").sort((a,b)=>(b.zarpe||"").localeCompare(a.zarpe||""));
 const tripName=id=>{const v=X().viajes.find(x=>x.id===id);return v?v.destino:""};
+const ruta=v=>v.origen?v.origen+" → "+v.destino:v.destino;
 function tripStats(v){const hz=v.hz||{},hl=v.hl||{};
   const dh=id=>{const a=hz[id];const b=v.estado==="Cerrado"?hl[id]:maq(id).horas;return a==null||b==null||isNaN(a)||isNaN(b)?null:Math.max(0,b-a)};
   const H={};MQ.forEach(id=>H[id]=dh(id));
@@ -101,9 +132,17 @@ const curWeekNow=()=>iso(monday(new Date()));
 function drying(){const L=X().entradas.filter(e=>e.tipo==="Limpieza"&&e.fecha===today()&&e.secado&&e.hFin).sort((a,b)=>(b.hFin||"").localeCompare(a.hFin||""));if(!L.length)return null;const e=L[0];
   const t=s=>{const[h,m]=s.split(":").map(Number);const d=new Date();d.setHours(h,m,0,0);return d};const a=t(e.hFin),b=t(e.secado),n=new Date();if(n>=b)return{done:true,e};return{done:false,e,p:Math.max(0,Math.min(100,(n-a)/(b-a)*100)),left:Math.round((b-n)/6e4)}}
 function lastWash(){return X().entradas.filter(e=>e.tipo==="Limpieza").sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||""))[0]}
+/* mantenimiento por tiempo: próxima fecha y estado */
+function addInt(d,n,u){const x=new Date(d+"T00:00:00");n=+n||0;if(u==="dias")x.setDate(x.getDate()+n);else if(u==="semanas")x.setDate(x.getDate()+7*n);else{const day=x.getDate();x.setDate(1);x.setMonth(x.getMonth()+(u==="anios"?12*n:n));x.setDate(Math.min(day,new Date(x.getFullYear(),x.getMonth()+1,0).getDate()))}return iso(x)}
+const cadaTxt=p=>{const n=+p.cada||1,u=UNI[p.unidad]||UNI.meses;return "Cada "+(n===1?u[0]:n+" "+u[1])};
+function pstate(p){if(!p.ultimo)return{next:null,d:null,cls:"",txt:"Sin registro: anota la última vez"};const next=addInt(p.ultimo,p.cada,p.unidad),d=daysTo(next),av=+p.aviso||15;
+  return{next,d,cls:d<0?"bad":d<=av?"warn":"",txt:d<0?"Vencido hace "+(-d)+(d===-1?" día":" días"):d===0?"Toca hoy":"Faltan "+d+(d===1?" día":" días")}}
+const planes=()=>[...X().planes].filter(p=>p.activo!==false).sort((a,b)=>{const x=pstate(a),y=pstate(b);return (x.d??1e6)-(y.d??1e6)||(a.nombre||"").localeCompare(b.nombre||"")});
 function alerts(){const A=[];
   maqs().forEach(m=>{if(!m.fecha)A.push({o:2,c:"",t:m.nombre+": sin lectura de horas",d:"Registra el horómetro para calcular servicios",e:"Máquinas",go:"mant"});
     (m.tareas||[]).forEach(t=>{const s=tstate(m,t);if(s.cls)A.push({o:s.rem<=0?0:1,c:s.cls,t:m.nombre+": "+t.t,d:s.rem<=0?"Vencido por "+nf(-s.rem)+" h":"Faltan "+nf(s.rem)+" h",e:"Servicio",go:"mant"})})});
+  const sinF=[];planes().forEach(p=>{const s=pstate(p);if(s.cls)A.push({o:s.d<0?0:1,c:s.cls,t:p.nombre,d:s.txt+" · "+fdate(s.next),e:"Mantenimiento",go:"mant",k:"p:"+p.id+":"+s.next});else if(!p.ultimo)sinF.push(p)});
+  if(sinF.length)A.push({o:3,c:"",t:sinF.length===1?sinF[0].nombre+": sin fecha":sinF.length+" mantenimientos sin fecha",d:"Anota la última vez que se hizo para calcular el próximo aviso",e:"Mantenimiento",go:"mant"});
   X().venc.forEach(v=>{if(!v.vence)return;const d=daysTo(v.vence),av=+v.aviso||60;if(d<=av)A.push({o:d<0?0:1,c:d<0?"bad":"warn",t:v.nombre,d:d<0?"Vencido hace "+(-d)+" días":"Vence en "+d+" días · "+fdate(v.vence),e:"Papeles",go:"barco"})});
   if(FIN())X().facturas.filter(f=>+f.saldo>0).forEach(f=>A.push({o:1,c:"warn",t:"Saldo por pagar: "+f.proveedor,d:money2(f.saldo)+" · "+f.nombre,e:"Factura",go:"barco"}));
   X().temas.filter(q=>q.estado!=="resuelto"&&q.prioridad==="alta").forEach(q=>A.push({o:1,c:"warn",t:q.tipo+" prioritario",d:q.texto,e:"Tema",go:"barco"}));
@@ -145,7 +184,7 @@ function montarFondoHero(){const h=$("#main .hero");if(!h)return;
 /* ---------- HOY ---------- */
 function vHoy(){const ot=tripOpen()[0],b=X().barco||{};const d=new Date();
   let hero;
-  if(ot){const t=tripStats(ot);hero=`<section class="hero"><div class="row"><div class="state"><span class="eyebrow">Navegando · día ${t.dias}</span><h2>${esc(ot.destino)}</h2>
+  if(ot){const t=tripStats(ot);hero=`<section class="hero"><div class="row"><div class="state"><span class="eyebrow">Navegando · día ${t.dias}</span><h2>${esc(ruta(ot))}</h2>
       <span class="meta">${esc(ot.tipo||"Viaje")}${ot.cliente?" · "+esc(ot.cliente):""}${ot.personas?" · "+esc(ot.personas)+" a bordo":""} · zarpe ${fdateS(ot.zarpe)}${ot.horaZarpe?" "+esc(ot.horaZarpe):""}</span></div>
       <span class="pill sea">En curso</span></div>
     <div class="stats num"><div><span>Motor</span><b>${nf(t.motor)} h</b></div><div><span>Combustible</span><b>${nf(t.litros)} L</b></div><div><span>Gastos</span><b>${money(t.gasto)}</b></div><div><span>Ingreso</span><b>${t.ingreso?money(t.ingreso):"—"}</b></div></div>
@@ -184,8 +223,10 @@ function vViajes(){
     <div class="kpi"><span>Combustible</span><b>${nf(tl)} L</b><small>${tm?nf(tl/tm,1)+" L por hora de motor":"Sin consumo calculado"}</small></div><div class="kpi"><span>Resultado</span><b class="${ti-tg>=0?"pos":"neg"}">${money(ti-tg)}</b><small>${money(ti)} ingresos · ${money(tg)} gastos</small></div></div>
   <div class="trips">${T.length?T.map(({v,t})=>{const open=v.estado!=="Cerrado";const hz=v.hz||{},hl=v.hl||{};
     const hrow=id=>{const n={babor:"Babor",estribor:"Estribor",planta:"Planta"}[id];return hz[id]!=null?`${n} ${nf(hz[id])} → ${open?"…":nf(hl[id])} h`:""};
-    return `<article class="card trip ${open?"open":""}"><div class="th"><div><h3>${esc(v.destino)} ${open?'<span class="pill sea">En curso</span>':""}<span class="pill">${esc(v.tipo||"Viaje")}</span></h3>
-      <div class="when">${fdate(v.zarpe)}${v.llegada?" → "+fdate(v.llegada):""} · ${t.dias} ${t.dias===1?"día":"días"}${v.personas?" · "+esc(v.personas)+" personas":""}${v.cliente?" · "+esc(v.cliente):""}</div></div>
+    const D=v.documentos||[];
+    return `<article class="card trip ${open?"open":""}"><div class="th"><div><h3>${esc(ruta(v))} ${open?'<span class="pill sea">En curso</span>':""}<span class="pill">${esc(v.tipo||"Viaje")}</span></h3>
+      <div class="when">${fdate(v.zarpe)}${v.horaZarpe?" "+esc(v.horaZarpe):""}${v.llegada?" → "+fdate(v.llegada):""} · ${t.dias} ${t.dias===1?"día":"días"}${v.numeroZarpe?" · zarpe N.º "+esc(v.numeroZarpe):""}${v.personas?" · "+esc(v.personas)+" personas":""}${v.cliente?" · "+esc(v.cliente):""}</div>
+      <div class="docs">${D.map((d,i)=>`<span class="doc"><button class="link" data-file="${esc(d.archivo)}">${ICON.doc}${esc(d.nombre)}</button>${db&&ROL!=="tripulacion"?`<button class="link danger x" data-tdocdel="${esc(v.id)}|${i}" aria-label="Quitar ${esc(d.nombre)}">×</button>`:""}</span>`).join("")}${db?`<button class="link" data-tdoc="${esc(v.id)}">+ Documento</button>`:""}${!D.length&&!db?`<span class="sub">Sin documentos</span>`:""}</div></div>
       ${db&&open?`<button class="btn sand sm" data-tclose="${esc(v.id)}">Registrar llegada</button>`:""}</div>
       <div class="tstats num"><div><span>Motor${open?" (hoy)":""}</span><b>${nf(t.motor)} h</b></div><div><span>Millas</span><b>${v.millas?nf(v.millas):"—"}</b></div><div><span>Combustible</span><b>${nf(t.litros)} L</b></div><div><span>Gastos</span><b>${money(t.gasto)}</b></div><div><span>Resultado</span><b class="${t.res>=0?"pos":"neg"}">${t.ingreso||t.gasto?money(t.res):"—"}</b></div></div>
       <details><summary>Detalle: ${t.G.length} gastos · ${t.E.length} notas · horómetros</summary>
@@ -199,13 +240,27 @@ function vMant(){const w=curW,dd=new Date(w+"T00:00:00"),e=new Date(dd);e.setDat
   const st=revDoc(w).items||{};const act=[...X().items].filter(i=>i.activo!==false).sort((a,b)=>(+a.orden||0)-(+b.orden||0));const p=revProg(w);
   const W=X().entradas.filter(x=>x.tipo==="Limpieza").sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||"")).slice(0,5);
   const NV=X().entradas.filter(x=>x.tipo==="Novedad"&&!x.resuelta);
+  const P=planes();const C=X().entradas.filter(x=>x.pieza||(x.tipo==="Mantenimiento"&&x.foto)).sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||"")||(b.hora||"").localeCompare(a.hora||""));
+  const eqs=[...new Set(C.map(x=>x.equipo).filter(Boolean))].sort();if(fEq&&!eqs.includes(fEq))fEq="";const CF=C.filter(x=>!fEq||x.equipo===fEq);
   return `<div class="vh"><div><span class="eyebrow">Motores, revisión y lavado</span><h1>Mantenimiento</h1><p>Servicios calculados por horas de horómetro.</p></div>
-    ${db?`<div class="tacts"><button class="btn sm" data-act="addmaq">Añadir máquina</button><button class="btn pri sm" data-act="hours">Registrar horas</button></div>`:""}</div>
+    ${db?`<div class="tacts"><button class="btn sm" data-act="addmaq">Añadir máquina</button><button class="btn sm" data-act="hours">Registrar horas</button><button class="btn pri sm" data-act="pieza">Cambio de pieza</button></div>`:""}</div>
   <div class="mqs">${maqs().length?maqs().map(m=>`<article class="card mq"><div class="t"><h3>${esc(m.nombre)}</h3><small class="sub">${esc([m.modelo,m.serial?"S/N "+m.serial:""].filter(Boolean).join(" · "))}</small></div>
     <div class="hrs num">${m.fecha?nf(m.horas):"—"}<span>h</span></div>${m.fecha?`<span class="lec">Lectura del ${fdate(m.fecha)}</span>`:`<span class="lec warn">Sin lectura. Toca «Registrar horas».</span>`}
     ${(m.tareas||[]).map((t,i)=>{const s=tstate(m,t);return `<div class="sv ${s.cls}"><div class="r"><b>${esc(t.t)}</b>${s.rem==null?'<span class="na">Sin dato · cada '+nf(t.cada)+' h</span>':`<span class="rem num">${s.rem<=0?"Vencido "+nf(-s.rem)+" h":"Faltan "+nf(s.rem)+" h"}</span>`}</div>${s.rem==null?"":`<div class="trk"><i style="width:${s.pct}%"></i></div>`}
       </div>`}).join("")}
     ${db?`<div class="ft">${(m.tareas||[]).length?`<button class="btn sm" data-serv="${esc(m.id)}">Registrar servicio</button>`:""}<button class="link" data-medit="${esc(m.id)}">Editar</button></div>`:""}</article>`).join(""):`<div class="card"><p class="empty">Sin máquinas.</p>${db?`<button class="btn sm" data-act="defmaq">Crear motores y planta</button>`:""}</div>`}</div>
+  <section class="card"><div class="ch"><div><h2>Mantenimiento por tiempo</h2><p class="sub">Extintores, aires acondicionados, desalinizadora, casco… con aviso antes de que toque</p></div>
+    ${db?`<div class="tacts">${puedeAvisar()&&!avisosOn()&&Notification.permission!=="denied"?`<button class="btn sm" data-act="notif">${ICON.campana}Activar avisos</button>`:""}<button class="btn sm" data-act="plansug">Sugeridos</button><button class="btn sm" data-act="plan">Añadir</button></div>`:""}</div>
+    ${P.length?`<div class="plans">${P.map(p=>{const st=pstate(p);return `<div class="plan ${st.cls}"><div class="pt"><b>${esc(p.nombre)}</b><small>${esc([p.sistema,cadaTxt(p)].filter(Boolean).join(" · "))}</small></div>
+      <div class="pd"><span class="${st.cls?"st "+st.cls:"st"}">${esc(st.txt)}</span><small>${p.ultimo?"Último: "+fdate(p.ultimo)+" · próximo: "+fdate(st.next):"Toca «Hecho» con la fecha de la última vez"}</small></div>
+      ${db?`<div class="pa"><button class="btn sm ${st.cls?"sand":""}" data-phecho="${esc(p.id)}">Hecho</button><button class="link" data-pedit="${esc(p.id)}">Editar</button></div>`:""}</div>`}).join("")}</div>`
+      :`<p class="empty">Aún no hay mantenimientos por tiempo. Toca «Sugeridos» para cargar el plan recomendado (extintores, aires, balsa, desalinizadora, casco…) y ajusta cada intervalo.</p>`}</section>
+  <section class="card"><div class="ch"><div><h2>Cambios de piezas</h2><p class="sub">Qué se cambió, cuándo y con foto</p></div>${db?`<button class="btn sm" data-act="pieza">Registrar cambio</button>`:""}</div>
+    ${eqs.length>1?`<div class="filters">${["",...eqs].map(q=>`<button class="chipf" aria-pressed="${q===fEq}" data-feq="${esc(q)}">${esc(q||"Todos")}</button>`).join("")}</div>`:""}
+    ${CF.length?`<div class="chg">${CF.slice(0,30).map(x=>`<div class="ci"><div class="cd num">${x.fecha?`<b>${+x.fecha.slice(8)}</b><span>${MES[+x.fecha.slice(5,7)-1]} ${x.fecha.slice(2,4)}</span>`:"<b>—</b>"}</div>
+      <div class="cb"><b>${esc(x.pieza||x.titulo)}</b><small>${esc([x.equipo,x.detalle].filter(Boolean).join(" · "))}</small></div>
+      <div class="cx">${x.foto?`<button class="link fotol" data-file="${esc(x.foto)}">${ICON.foto}Foto</button>`:""}${+x.costo?`<span class="num">${money2(x.costo)}</span>`:""}${db?`<button class="link" data-eedit="${esc(x.id)}">Editar</button>`:""}</div></div>`).join("")}</div>`
+      :`<p class="empty">Registra cada pieza que se cambie (filtros, impeler, correas…) con su foto. Ej.: 22 nov, desalinizadora, filtro de 5 micras.</p>`}</section>
   <div class="grid2">
     <section class="card"><div class="ch"><div><h2>Revisión semanal</h2><p class="sub">Semana del ${dd.getDate()} ${MES[dd.getMonth()]} al ${e.getDate()} ${MES[e.getMonth()]}</p></div>
       <div class="month"><button id="wPrev" aria-label="Semana anterior">‹</button><button id="wNext" aria-label="Semana siguiente">›</button></div></div>
@@ -298,6 +353,7 @@ function vLog(){const q=(log.q||"").toLowerCase();
     const day=e.fecha!==last?`<div class="day">${fdate(e.fecha)}</div>`:"";last=e.fecha;
     return day+`<article class="en"><div class="ic ${esc(e.tipo)}">${TIPO_IC[e.tipo]||ICON.log}</div><div style="min-width:0"><h3>${esc(e.titulo)}</h3>${e.detalle?`<p>${esc(e.detalle)}</p>`:""}
       ${meta.length?`<div class="meta">${meta.map(x=>`<span class="num">${esc(x)}</span>`).join("")}</div>`:""}
+      ${e.foto?`<button class="link fotol" data-file="${esc(e.foto)}">${ICON.foto}Ver foto</button>`:""}
       ${db?`<div class="acts"><button class="link" data-eedit="${esc(e.id)}">Editar</button>${e.tipo==="Novedad"?`<button class="link" data-eres="${esc(e.id)}">${e.resuelta?"Reabrir":"Marcar resuelta"}</button>`:""}<button class="link danger" data-del="entradas/${esc(e.id)}">Eliminar</button></div>`:""}</div>
       <div class="amt num">${+e.costo?money2(e.costo):""}</div></article>`}).join("");
   return `<div class="vh"><div><span class="eyebrow">Todo lo que pasa a bordo</span><h1>Bitácora</h1></div>${db?`<button class="btn pri sm" data-act="entry">Nueva nota</button>`:""}</div>
@@ -314,6 +370,7 @@ function vAjustes(){const b=X().barco||{};
       <div class="setrow"><div><b>Ficha técnica y papeles</b><small>Matrícula, certificados, equipos de radio</small></div><button class="btn sm" data-go="barco">Abrir</button></div>
       <div class="setrow"><div><b>Máquinas y servicios</b><small>${maqs().length} equipos</small></div><button class="btn sm" data-go="mant">Abrir</button></div>
       <div class="setrow"><div><b>Puntos de revisión semanal</b><small>${X().items.length} puntos</small></div>${db?`<button class="btn sm" data-act="item">Añadir punto</button>`:""}</div>
+      <div class="setrow"><div><b>Avisos en este teléfono</b><small>${!puedeAvisar()?"Este navegador no permite avisos":avisosOn()?"Activados: avisa de mantenimientos, servicios y papeles al abrir la app":Notification.permission==="denied"?"Bloqueados en los ajustes del teléfono":"Desactivados"}</small></div>${puedeAvisar()&&!avisosOn()&&Notification.permission!=="denied"?`<button class="btn sm" data-act="notif">Activar</button>`:""}</div>
       <div class="setrow"><div><b>Pagos fijos</b><small>${X().fijos.length} conceptos</small></div><button class="btn sm" data-go="fin">Abrir</button></div>
       <div class="setrow"><div><b>Sincronización</b><small>${STATUS.online?"Con señal":"Sin señal"} · ${STATUS.pending?STATUS.pending+" cambios por enviar":"todo enviado"}${STATUS.lastSync?" · "+STATUS.lastSync.toLocaleTimeString("es-VE",{hour:"2-digit",minute:"2-digit"}):""}</small></div><button class="btn sm" data-act="sync">Sincronizar</button></div>
       <div class="setrow"><div><b>Exportar a Excel</b><small>Viajes, bitácora, gastos, máquinas y revisiones</small></div><button class="btn sm" data-act="xls" >Descargar</button></div>
@@ -353,13 +410,15 @@ const stamp=()=>new Date().toISOString();
 
 /* ================= acciones ================= */
 function newTrip(){if(realOpen()){toast("Registra la llegada del viaje en curso antes de un nuevo zarpe.");go("viajes");return}
-  dialog("Nuevo zarpe",[{k:"destino",l:"Destino o ruta",full:1,req:1,ph:"Ej. Isla de Plata · Mochima"},{k:"tipo",l:"Tipo de salida",t:"select",o:TIPOV},{k:"personas",l:"Personas a bordo",t:"number"},
-    {k:"zarpe",l:"Fecha",t:"date",req:1},{k:"horaZarpe",l:"Hora de zarpe",t:"time"},{k:"cliente",l:"Cliente o invitados",full:1},{k:"ingreso",l:"Ingreso del charter (USD)",t:"number"},
+  dialog("Nuevo zarpe",[{k:"origen",l:"Desde",req:1,ph:"Ej. Puerto La Cruz"},{k:"destino",l:"Hacia",req:1,ph:"Ej. Isla de Plata · Mochima"},{k:"tipo",l:"Tipo de salida",t:"select",o:TIPOV},{k:"numeroZarpe",l:"N.º de zarpe",ph:"Como aparece en el documento"},
+    {k:"zarpe",l:"Fecha",t:"date",req:1},{k:"horaZarpe",l:"Hora de zarpe",t:"time"},{k:"personas",l:"Personas a bordo",t:"number"},{k:"cliente",l:"Cliente, invitados o a quién se presta"},{k:"ingreso",l:"Ingreso (USD)",t:"number"},
+    {k:"doc",l:"Documento del zarpe (PDF o foto)",t:"file",acc:"application/pdf,image/*",full:1},
     {sep:"Horómetros al zarpar"},{k:"babor",l:"Babor (h)",t:"number",req:1},{k:"estribor",l:"Estribor (h)",t:"number",req:1},{k:"planta",l:"Planta (h)",t:"number"},
     {k:"notas",l:"Notas",t:"textarea",full:1,ph:"Condiciones del mar, motivo, pedidos especiales…"}],
-    {zarpe:today(),horaZarpe:nowHM(),tipo:"Charter",babor:rh("babor"),estribor:rh("estribor"),planta:rh("planta")},o=>{
+    {origen:(S.barco||{}).puerto||"Puerto La Cruz",zarpe:today(),horaZarpe:nowHM(),tipo:"Charter",babor:rh("babor"),estribor:rh("estribor"),planta:rh("planta")},o=>{
     const hz={babor:numOrNull(o.babor),estribor:numOrNull(o.estribor),planta:numOrNull(o.planta)};
-    safe(async()=>{await ensureMaq();await put("viajes",{destino:o.destino,tipo:o.tipo,cliente:o.cliente,personas:numOrNull(o.personas),ingreso:numOrNull(o.ingreso),zarpe:o.zarpe,horaZarpe:o.horaZarpe,notas:o.notas,hz,hl:{},estado:"En curso",creado:stamp()});
+    safe(async()=>{await ensureMaq();const documentos=o.doc?[{nombre:"Zarpe",archivo:await subirArchivo(o.doc,"docs"),fecha:today()}]:[];
+      await put("viajes",{origen:o.origen,destino:o.destino,numeroZarpe:o.numeroZarpe,documentos,tipo:o.tipo,cliente:o.cliente,personas:numOrNull(o.personas),ingreso:numOrNull(o.ingreso),zarpe:o.zarpe,horaZarpe:o.horaZarpe,notas:o.notas,hz,hl:{},estado:"En curso",creado:stamp()});
       await applyHours(o.zarpe,hz,"Zarpe: "+o.destino);go("hoy")},"Zarpe registrado. Buen viaje.")},"Registrar zarpe")}
 function closeTrip(id){const v=S.viajes.find(x=>x.id===id);if(!v)return
   dialog("Llegada: "+v.destino,[{k:"llegada",l:"Fecha de llegada",t:"date",req:1},{k:"millas",l:"Millas navegadas",t:"number"},{sep:"Horómetros al llegar"},{k:"babor",l:"Babor (h)",t:"number",req:1},{k:"estribor",l:"Estribor (h)",t:"number",req:1},{k:"planta",l:"Planta (h)",t:"number"},
@@ -369,12 +428,16 @@ function closeTrip(id){const v=S.viajes.find(x=>x.id===id);if(!v)return
     for(const k of MQ){if(hl[k]!=null&&v.hz&&v.hz[k]!=null&&hl[k]<v.hz[k]){toast("Las horas de llegada de "+k+" son menores que al zarpar.");return}}
     safe(async()=>{await patch("viajes",id,{llegada:o.llegada,millas:numOrNull(o.millas),hl,ingreso:numOrNull(o.ingreso),estado:"Cerrado",notas:[v.notas,o.cierre].filter(Boolean).join(" · ")});await applyHours(o.llegada,hl,"Llegada: "+v.destino)},"Llegada registrada")},"Registrar llegada")}
 function editTrip(id){const v=S.viajes.find(x=>x.id===id);if(!v)return;const cl=v.estado==="Cerrado";const hz=v.hz||{},hl=v.hl||{};
-  dialog("Editar viaje",[{k:"destino",l:"Destino",full:1,req:1},{k:"tipo",l:"Tipo",t:"select",o:TIPOV},{k:"personas",l:"Personas",t:"number"},{k:"zarpe",l:"Zarpe",t:"date"},{k:"cliente",l:"Cliente"},{k:"ingreso",l:"Ingreso (USD)",t:"number"},
+  dialog("Editar viaje",[{k:"origen",l:"Desde"},{k:"destino",l:"Hacia",req:1},{k:"tipo",l:"Tipo",t:"select",o:TIPOV},{k:"numeroZarpe",l:"N.º de zarpe"},{k:"personas",l:"Personas",t:"number"},{k:"zarpe",l:"Zarpe",t:"date"},{k:"cliente",l:"Cliente"},{k:"ingreso",l:"Ingreso (USD)",t:"number"},
     ...(cl?[{k:"llegada",l:"Llegada",t:"date"},{k:"millas",l:"Millas",t:"number"}]:[]),{sep:"Horómetros"},{k:"zb",l:"Babor al zarpar",t:"number"},{k:"ze",l:"Estribor al zarpar",t:"number"},
     ...(cl?[{k:"lb",l:"Babor al llegar",t:"number"},{k:"le",l:"Estribor al llegar",t:"number"}]:[]),{k:"notas",l:"Notas",t:"textarea",full:1}],
-    {...v,zb:hz.babor,ze:hz.estribor,lb:hl.babor,le:hl.estribor},o=>{const u={destino:o.destino,tipo:o.tipo,personas:numOrNull(o.personas),zarpe:o.zarpe,cliente:o.cliente,ingreso:numOrNull(o.ingreso),notas:o.notas,hz:{...hz,babor:numOrNull(o.zb),estribor:numOrNull(o.ze)}};
+    {...v,zb:hz.babor,ze:hz.estribor,lb:hl.babor,le:hl.estribor},o=>{const u={origen:o.origen,destino:o.destino,numeroZarpe:o.numeroZarpe,tipo:o.tipo,personas:numOrNull(o.personas),zarpe:o.zarpe,cliente:o.cliente,ingreso:numOrNull(o.ingreso),notas:o.notas,hz:{...hz,babor:numOrNull(o.zb),estribor:numOrNull(o.ze)}};
     if(cl){u.llegada=o.llegada;u.millas=numOrNull(o.millas);u.hl={...hl,babor:numOrNull(o.lb),estribor:numOrNull(o.le)}}
     safe(()=>patch("viajes",id,u),"Viaje actualizado")})}
+function addDoc(vid){const v=S.viajes.find(x=>x.id===vid);if(!v)return;
+  dialog("Documento del viaje",[{hint:ruta(v)+(v.numeroZarpe?" · zarpe N.º "+v.numeroZarpe:"")},{k:"nombre",l:"Documento",t:"select",o:DOCS_ZARPE},{k:"otro",l:"Nombre (si es otro)"},{k:"file",l:"Archivo (PDF o foto)",t:"file",acc:"application/pdf,image/*",full:1}],{nombre:(v.documentos||[]).some(d=>d.nombre==="Zarpe")?"Lista de pasajeros":"Zarpe"},
+    o=>{if(!o.file){toast("Elige el archivo del documento.");return}safe(async()=>{const archivo=await subirArchivo(o.file,"docs");await patch("viajes",vid,{documentos:[...(v.documentos||[]),{nombre:o.nombre==="Otro"&&o.otro?o.otro:o.nombre,archivo,fecha:today()}]})},"Documento guardado")},"Subir documento")}
+function quitarDoc(vid,i){const v=S.viajes.find(x=>x.id===vid);if(!v)return;const D=[...(v.documentos||[])];D.splice(+i,1);safe(()=>patch("viajes",vid,{documentos:D}),"Documento quitado")}
 function newFuel(vid){const v=vidOf(vid);
   dialog("Carga de combustible",[{k:"fecha",l:"Fecha",t:"date",req:1},{k:"hora",l:"Hora",t:"time"},{k:"litros",l:"Litros",t:"number",req:1},{k:"costo",l:"Costo (USD)",t:"number"},{k:"lugar",l:"Dónde",ph:"Ej. Bahía Redonda"},{k:"pago",l:"Forma de pago",t:"select",o:PAGOS},{k:"viajeId",l:"Viaje",t:"select",o:realTripOpts(),full:1}],
     {fecha:today(),hora:nowHM(),viajeId:v,pago:"Efectivo USD"},o=>safe(async()=>{const ref={id:newId()};const L=numOrNull(o.litros),C=numOrNull(o.costo);
@@ -392,20 +455,48 @@ function newWash(){dialog("Lavado",[{k:"zona",l:"Qué se lavó",t:"select",o:ZON
     if(C>0)await put("gastos",{fecha:o.fecha,concepto:"Lavado: "+o.zona.toLowerCase(),tipo:"Mantenimiento",categoria:"Limpieza",monto:C,entradaId:ref.id,creado:stamp()})},"Lavado registrado"),"Guardar lavado")}
 function newNov(){dialog("Novedad",[{k:"titulo",l:"Qué pasa",full:1,req:1,ph:"Ej. Goteo en la bomba de agua dulce"},{k:"fecha",l:"Fecha",t:"date",req:1},{k:"lugar",l:"Dónde"},{k:"detalle",l:"Detalle",t:"textarea",full:1}],{fecha:today()},
   o=>safe(()=>put("entradas",{...o,hora:nowHM(),tipo:"Novedad",resuelta:false,viajeId:(realOpen()||{}).id||"",creado:stamp()}),"Novedad registrada"),"Guardar novedad")}
-function entryFields(){return[{k:"fecha",l:"Fecha",t:"date",req:1},{k:"hora",l:"Hora",t:"time"},{k:"tipo",l:"Tipo",t:"select",o:TIPOS},{k:"lugar",l:"Lugar"},{k:"titulo",l:"Qué pasó",full:1,req:1},{k:"detalle",l:"Detalle",t:"textarea",full:1},{k:"litros",l:"Litros",t:"number"},{k:"costo",l:"Costo (USD)",t:"number"},{k:"viajeId",l:"Viaje",t:"select",o:realTripOpts(),full:1}]}
-function newEntry(vid){dialog("Nueva nota",entryFields(),{fecha:today(),hora:nowHM(),tipo:"Navegación",viajeId:vidOf(vid)},o=>safe(async()=>{const ref={id:newId()};const e={...o,litros:numOrNull(o.litros),costo:numOrNull(o.costo),creado:stamp()};await ref.set(e);
+function entryFields(e){return[{k:"fecha",l:"Fecha",t:"date",req:1},{k:"hora",l:"Hora",t:"time"},{k:"tipo",l:"Tipo",t:"select",o:TIPOS},{k:"lugar",l:"Lugar"},{k:"titulo",l:"Qué pasó",full:1,req:1},{k:"detalle",l:"Detalle",t:"textarea",full:1},{k:"litros",l:"Litros",t:"number"},{k:"costo",l:"Costo (USD)",t:"number"},{k:"viajeId",l:"Viaje",t:"select",o:realTripOpts(),full:1},{k:"foto",l:e&&e.foto?"Reemplazar foto":"Foto",t:"file",full:1}]}
+function newEntry(vid){dialog("Nueva nota",entryFields(),{fecha:today(),hora:nowHM(),tipo:"Navegación",viajeId:vidOf(vid)},o=>safe(async()=>{const ref={id:newId()};const f=o.foto;delete o.foto;const e={...o,id:ref.id,litros:numOrNull(o.litros),costo:numOrNull(o.costo),creado:stamp()};if(f)e.foto=await subirArchivo(f,"docs");await put("entradas",e);
   if(+e.costo>0)await put("gastos",{fecha:o.fecha,concepto:o.titulo,tipo:o.tipo==="Mantenimiento"?"Mantenimiento":"Operativo",categoria:o.tipo,monto:+e.costo,litros:e.litros,entradaId:ref.id,viajeId:o.viajeId,creado:stamp()})},"Nota guardada"),"Guardar nota")}
-function editEntry(id){const e=S.entradas.find(x=>x.id===id);if(!e)return;dialog("Editar nota",entryFields(),e,o=>{const u={...o,litros:numOrNull(o.litros),costo:numOrNull(o.costo)};
-  safe(async()=>{await patch("entradas",id,u);const g=S.gastos.find(x=>x.entradaId===id);
+function editEntry(id){const e=S.entradas.find(x=>x.id===id);if(!e)return;dialog("Editar nota",entryFields(e),e,o=>{const f=o.foto;delete o.foto;const u={...o,litros:numOrNull(o.litros),costo:numOrNull(o.costo)};
+  safe(async()=>{if(f)u.foto=await subirArchivo(f,"docs");await patch("entradas",id,u);const g=S.gastos.find(x=>x.entradaId===id);
     if(g){if(+u.costo>0)await patch("gastos",g.id,{monto:+u.costo,fecha:u.fecha,viajeId:u.viajeId,litros:u.litros});else await remove("gastos",g.id)}
     else if(+u.costo>0)await put("gastos",{fecha:u.fecha,concepto:u.titulo,tipo:u.tipo==="Mantenimiento"?"Mantenimiento":"Operativo",categoria:u.tipo,monto:+u.costo,litros:u.litros,entradaId:id,viajeId:u.viajeId,creado:stamp()})},"Nota actualizada")})}
+/* cambio de pieza: fecha, equipo, pieza y foto; queda en la bitácora y en el historial de Mantenimiento */
+function equiposOpts(){return[...new Set([...maqs().map(m=>m.nombre),...EQUIPOS_BASE.filter(x=>x!=="Otro"),...X().entradas.map(e=>e.equipo).filter(Boolean),"Otro"])]}
+function newCambio(pre){pre=pre||{};
+  dialog("Cambio de pieza",[{k:"fecha",l:"Fecha del cambio",t:"date",req:1},{k:"equipo",l:"Equipo",t:"select",o:equiposOpts()},{k:"otro",l:"Equipo (si es otro)"},{k:"pieza",l:"Qué pieza se cambió",req:1,ph:"Ej. Filtro de 5 micras"},
+    {k:"costo",l:"Costo (USD)",t:"number"},{k:"proveedor",l:"Proveedor o marca",ph:"Ej. Spectra, original"},{k:"detalle",l:"Notas",t:"textarea",full:1,ph:"Estado de la pieza vieja, quién la cambió, próxima revisión…"},
+    {k:"foto",l:"Foto de la pieza",t:"file",full:1},{hint:"La foto y la fecha quedan en el historial de cambios del equipo."}],{fecha:today(),equipo:pre.equipo||"Desalinizadora"},
+    o=>{const equipo=o.equipo==="Otro"?(o.otro||"Otro"):o.equipo;safe(async()=>{const ref={id:newId()};const C=numOrNull(o.costo);const foto=o.foto?await subirArchivo(o.foto,"docs"):null;
+      await put("entradas",{id:ref.id,fecha:o.fecha,hora:nowHM(),tipo:"Mantenimiento",titulo:"Cambio: "+o.pieza+" · "+equipo,equipo,pieza:o.pieza,detalle:[o.proveedor,o.detalle].filter(Boolean).join(" · "),costo:C,foto,viajeId:(realOpen()||{}).id||"",creado:stamp()});
+      if(C>0)await put("gastos",{fecha:o.fecha,concepto:"Repuesto: "+o.pieza+" ("+equipo+")",tipo:"Mantenimiento",categoria:"Repuestos",proveedor:o.proveedor,monto:C,entradaId:ref.id,creado:stamp()})},"Cambio registrado")},"Guardar cambio")}
+/* mantenimiento por tiempo */
+function plan(id){const p=id?S.planes.find(x=>x.id===id):{cada:6,unidad:"meses",aviso:15,sistema:"Seguridad"};if(id&&!p)return;
+  dialog(id?"Editar mantenimiento":"Mantenimiento por tiempo",[{k:"nombre",l:"Qué hay que hacer",full:1,req:1,ph:"Ej. Aires acondicionados: limpieza de filtros"},{k:"sistema",l:"Sistema",t:"select",o:SISTEMAS},
+    {k:"cada",l:"Cada",t:"number",req:1},{k:"unidad",l:"Unidad",t:"select",o:Object.entries(UNI).map(([v,l])=>({v,l:l[1]}))},{k:"ultimo",l:"Última vez que se hizo",t:"date"},{k:"aviso",l:"Avisar con (días de anticipación)",t:"number"},
+    {k:"nota",l:"Notas",t:"textarea",full:1,ph:"Proveedor, repuesto, cómo se hace…"},...(id?[{k:"activo",l:"Estado",t:"select",o:["Activo","Pausado"]}]:[]),{hint:"La app calcula la próxima fecha y avisa en «Atención» y en el teléfono cuando se acerca."}],
+    {...p,activo:p.activo===false?"Pausado":"Activo"},o=>{const u={nombre:o.nombre,sistema:o.sistema,cada:Math.max(1,Math.round(+o.cada||1)),unidad:o.unidad,ultimo:o.ultimo||null,aviso:numOrNull(o.aviso)??15,nota:o.nota};if(id)u.activo=o.activo!=="Pausado";
+    safe(()=>id?patch("planes",id,u):put("planes",{...u,activo:true,orden:S.planes.length+1}),"Mantenimiento guardado")})}
+function planHecho(id){const p=S.planes.find(x=>x.id===id);if(!p)return;
+  dialog("Hecho: "+p.nombre,[{k:"fecha",l:"Fecha en que se hizo",t:"date",req:1},{k:"costo",l:"Costo (USD)",t:"number"},{k:"pieza",l:"Pieza cambiada (si aplica)",ph:"Ej. Filtro de aire"},{k:"detalle",l:"Notas",t:"textarea",full:1},{k:"foto",l:"Foto",t:"file",full:1},{hint:cadaTxt(p)+": el próximo aviso se calcula desde esta fecha."}],{fecha:today()},
+    o=>safe(async()=>{const ref={id:newId()};const C=numOrNull(o.costo);const foto=o.foto?await subirArchivo(o.foto,"docs"):null;
+      if(!p.ultimo||o.fecha>=p.ultimo)await patch("planes",id,{ultimo:o.fecha});
+      await put("entradas",{id:ref.id,fecha:o.fecha,hora:nowHM(),tipo:"Mantenimiento",titulo:p.nombre,equipo:p.sistema||"",pieza:o.pieza||null,planId:id,detalle:o.detalle,costo:C,foto,creado:stamp()});
+      if(C>0)await put("gastos",{fecha:o.fecha,concepto:p.nombre,tipo:"Mantenimiento",categoria:o.pieza?"Repuestos":"Mano de obra",monto:C,entradaId:ref.id,creado:stamp()})},"Registrado. Próximo: "+fdate(addInt(o.fecha||today(),p.cada,p.unidad))),"Guardar")}
+function planSug(){const ya=new Set(S.planes.map(p=>(p.nombre||"").toLowerCase()));const F=PLAN_SUG.filter(x=>!ya.has(x[0].toLowerCase()));
+  if(!F.length){toast("Ya tienes todos los sugeridos. Usa «Añadir» para otros.");return}
+  dialog("Plan recomendado",[{hint:"Intervalos de referencia habituales; ajústalos a lo que indique cada fabricante. Después anota en cada uno la fecha de la última vez."},
+    {k:"cual",l:"Qué agregar",t:"select",full:1,o:[{v:"todos",l:"Todos los que faltan ("+F.length+")"},...F.map((x,i)=>({v:String(i),l:x[0]+" · cada "+(x[2]===1?UNI[x[3]][0]:x[2]+" "+UNI[x[3]][1])}))]}],{cual:"todos"},
+    o=>{const L=o.cual==="todos"?F:[F[+o.cual]];safe(async()=>{let n=S.planes.length;for(const[nombre,sistema,cada,unidad,aviso]of L)await put("planes",{nombre,sistema,cada,unidad,aviso,ultimo:null,activo:true,orden:++n})},L.length===1?"Agregado":"Agregados "+L.length+" mantenimientos")},"Agregar")}
 function hours(){const M=S.maquinas.length?[...S.maquinas].sort((a,b)=>(+a.orden||9)-(+b.orden||9)):DEF_MAQ;const v={fecha:today()};M.forEach(m=>v[m.clave]=m.fecha?m.horas:"");
   dialog("Registrar horas",[{k:"fecha",l:"Fecha",t:"date",full:1,req:1},...M.map(m=>({k:m.clave,l:m.nombre+" (h)",t:"number"})),{k:"nota",l:"Nota",full:1}],v,o=>{const H={};M.forEach(m=>H[m.clave]=numOrNull(o[m.clave]));safe(async()=>{await ensureMaq();await applyHours(o.fecha,H,o.nota||"Lectura de horómetro")},"Horas registradas")})}
 function markService(mid){const m=S.maquinas.find(x=>x.id===mid);if(!m||!(m.tareas||[]).length)return;
   const ord=(m.tareas||[]).map((t,i)=>({t,i,s:tstate(m,t)})).sort((a,b)=>(a.s.rem??1e9)-(b.s.rem??1e9));
-  dialog("Servicio: "+m.nombre,[{k:"ti",l:"Qué se hizo",t:"select",full:1,o:ord.map(x=>({v:String(x.i),l:x.t.t}))},{k:"horas",l:"Hecho a las (h)",t:"number",req:1},{k:"fecha",l:"Fecha",t:"date",req:1},{k:"costo",l:"Costo (USD)",t:"number"},{k:"detalle",l:"Repuestos y notas",t:"textarea",full:1}],{horas:m.fecha?m.horas:"",fecha:today(),ti:String(ord[0].i)},
+  dialog("Servicio: "+m.nombre,[{k:"ti",l:"Qué se hizo",t:"select",full:1,o:ord.map(x=>({v:String(x.i),l:x.t.t}))},{k:"horas",l:"Hecho a las (h)",t:"number",req:1},{k:"fecha",l:"Fecha",t:"date",req:1},{k:"costo",l:"Costo (USD)",t:"number"},{k:"detalle",l:"Repuestos y notas",t:"textarea",full:1},{k:"foto",l:"Foto de la pieza o del trabajo",t:"file",full:1}],{horas:m.fecha?m.horas:"",fecha:today(),ti:String(ord[0].i)},
     o=>{const i=+o.ti,t=m.tareas[i];safe(async()=>{const T=[...m.tareas];T[i]={...t,ultimo:+o.horas};await patch("maquinas",mid,{tareas:T});const ref={id:newId()};const C=numOrNull(o.costo);
-      await put("entradas",{id:ref.id,fecha:o.fecha,hora:nowHM(),tipo:"Mantenimiento",titulo:m.nombre+": "+t.t,detalle:o.detalle,costo:C,creado:stamp()});
+      const foto=o.foto?await subirArchivo(o.foto,"docs"):null;
+      await put("entradas",{id:ref.id,fecha:o.fecha,hora:nowHM(),tipo:"Mantenimiento",titulo:m.nombre+": "+t.t,equipo:m.nombre,pieza:t.t,detalle:[o.detalle,"A las "+nf(o.horas)+" h"].filter(Boolean).join(" · "),costo:C,foto,creado:stamp()});
       if(C>0)await put("gastos",{fecha:o.fecha,concepto:m.nombre+": "+t.t,tipo:"Mantenimiento",categoria:"Repuestos",monto:C,entradaId:ref.id,creado:stamp()})},"Servicio registrado")},"Registrar servicio")}
 function maqForm(m){const T=[...(m.tareas||[])];while(T.length<Math.max(4,(m.tareas||[]).length+1))T.push({});
   const F=[{k:"nombre",l:"Nombre",req:1},{k:"modelo",l:"Marca y modelo",ph:"Ej. Volvo Penta D2-75"},{k:"serial",l:"Serial"},{k:"nota",l:"Nota"},{sep:"Servicios por horas"}];const V={nombre:m.nombre,modelo:m.modelo,serial:m.serial,nota:m.nota};
@@ -447,14 +538,16 @@ function armDelete(btn){const[c,id]=btn.dataset.del.split("/");if(ROL==="tripula
   if(armed===btn){armed=null;safe(async()=>{await remove(c,id);if(c==="entradas"){const g=S.gastos.find(x=>x.entradaId===id);if(g)await remove("gastos",g.id)}
     if(c==="viajes"){for(const g of S.gastos.filter(x=>x.viajeId===id))await patch("gastos",g.id,{viajeId:""});for(const e of S.entradas.filter(x=>x.viajeId===id))await patch("entradas",e.id,{viajeId:""})}},"Eliminado");return}
   if(armed)armed.textContent="Eliminar";armed=btn;btn.textContent="¿Eliminar? Toca otra vez";setTimeout(()=>{if(armed===btn){btn.textContent="Eliminar";armed=null}},4000)}
-function sheet(){const A=[["zarpe",ICON.zarpe,realOpen()?"Llegada":"Zarpe",realOpen()?"Cerrar el viaje en curso":"Salida con horómetros"],["fuel",ICON.fuel,"Combustible","Litros y costo"],["gasto",ICON.gasto,"Gasto","Recibo o pago"],["wash",ICON.agua,"Lavado","Con hora de secado"],["hours",ICON.horas,"Horas","Lectura de horómetro"],["nov",ICON.nov,"Novedad","Algo que revisar"],["entry",ICON.log,"Nota","Navegación u otro"],["tema",ICON.tema,"Tema","Pregunta o problema"]];
+function sheet(){const A=[["zarpe",ICON.zarpe,realOpen()?"Llegada":"Zarpe",realOpen()?"Cerrar el viaje en curso":"Salida con horómetros"],["fuel",ICON.fuel,"Combustible","Litros y costo"],["gasto",ICON.gasto,"Gasto","Recibo o pago"],["wash",ICON.agua,"Lavado","Con hora de secado"],["hours",ICON.horas,"Horas","Lectura de horómetro"],["pieza",ICON.pieza,"Cambio de pieza","Con fecha y foto"],["nov",ICON.nov,"Novedad","Algo que revisar"],["entry",ICON.log,"Nota","Navegación u otro"],["tema",ICON.tema,"Tema","Pregunta o problema"]];
   $("#sheetBody").innerHTML=A.map(([k,ic,l,s])=>`<button class="qa" value="cancel" data-act="${k}">${ic}<span>${l}<small>${s}</small></span></button>`).join("");$("#sheet").showModal()}
 async function excel(){const XLSX=await import("xlsx").catch(()=>null);if(!XLSX){toast("Necesitas conexión para exportar.");return}const R=S;
   const wb=XLSX.utils.book_new();const add=(name,rows)=>XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows.length?rows:[{"Sin datos":""}]),name);
-  add("Viajes",R.viajes.map(v=>{const t=tripStats(v);return{Zarpe:v.zarpe,Llegada:v.llegada||"",Destino:v.destino,Tipo:v.tipo||"",Cliente:v.cliente||"",Personas:v.personas??"",Millas:v.millas??"","Horas motor":t.motor,"Combustible (L)":t.litros,"Gastos (USD)":t.gasto,"Ingreso (USD)":t.ingreso,"Resultado (USD)":t.res}}));
+  add("Viajes",R.viajes.map(v=>{const t=tripStats(v);return{Zarpe:v.zarpe,Llegada:v.llegada||"","N.º de zarpe":v.numeroZarpe||"",Desde:v.origen||"",Destino:v.destino,Tipo:v.tipo||"",Documentos:(v.documentos||[]).map(d=>d.nombre).join(", "),Cliente:v.cliente||"",Personas:v.personas??"",Millas:v.millas??"","Horas motor":t.motor,"Combustible (L)":t.litros,"Gastos (USD)":t.gasto,"Ingreso (USD)":t.ingreso,"Resultado (USD)":t.res}}));
   add("Bitácora",R.entradas.map(e=>({Fecha:e.fecha,Hora:e.hora||"",Tipo:e.tipo,"Qué pasó":e.titulo,Detalle:e.detalle||"",Lugar:e.lugar||"",Litros:e.litros??"","Costo (USD)":e.costo??"",Secado:e.secado||"",Viaje:tripName(e.viajeId)})));
   add("Gastos",R.gastos.map(g=>({Fecha:g.fecha,Concepto:g.concepto,Tipo:g.tipo,"Categoría":g.categoria||"",Proveedor:g.proveedor||"",Pago:g.pago||"",Litros:g.litros??"",Viaje:tripName(g.viajeId),"Monto (USD)":+g.monto||0})));
   const MR=[];R.maquinas.forEach(m=>(m.tareas||[]).forEach(t=>{const s=tstate(m,t);MR.push({"Máquina":m.nombre,Modelo:m.modelo||"",Horas:m.horas,Lectura:m.fecha,Servicio:t.t,"Cada (h)":t.cada,"Último (h)":t.ultimo??"","Faltan (h)":s.rem==null?"":Math.round(s.rem)})}));add("Máquinas",MR);
+  add("Mantenimiento por tiempo",R.planes.map(p=>{const s=pstate(p);return{Mantenimiento:p.nombre,Sistema:p.sistema||"",Frecuencia:cadaTxt(p),"Última vez":p.ultimo||"","Próxima":s.next||"",Estado:s.txt,Activo:p.activo===false?"No":"Sí"}}));
+  add("Cambios de piezas",R.entradas.filter(e=>e.pieza).sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||"")).map(e=>({Fecha:e.fecha,Equipo:e.equipo||"",Pieza:e.pieza,Notas:e.detalle||"","Costo (USD)":e.costo??"",Foto:e.foto?"Sí":""})));
   add("Certificados",R.venc.map(v=>({Documento:v.nombre,"Número":v.numero||"",Emitido:v.emision||"",Vence:v.vence,"Días":v.vence?daysTo(v.vence):"",Notas:v.nota||""})));
   if(FIN()){add("Trabajos",R.trabajos.map(w=>({Fecha:w.fecha,"Qué se hizo":w.titulo,"Área":w.categoria||"",Proveedor:w.proveedor||"",Lugar:w.lugar||"","Horas motor":w.horas||"",Factura:w.factura||"",Estado:w.estado||"","Monto (USD)":+w.monto||0,Detalle:w.detalle||""})));
     add("Facturas",R.facturas.map(f=>({Fecha:f.fecha,Proveedor:f.proveedor,Documento:f.nombre,"Total (USD)":f.total??"","Saldo (USD)":+f.saldo||0})))}
@@ -463,7 +556,7 @@ async function excel(){const XLSX=await import("xlsx").catch(()=>null);if(!XLSX)
   const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([XLSX.write(wb,{bookType:"xlsx",type:"array"})]));a.download="Bitacora_Cay_Sarah_"+today()+".xlsx";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
 
 /* ================= eventos ================= */
-const ACT={sync:()=>db.sync().then(()=>toast(STATUS.online?"Sincronizado":"Sin señal")),zarpe:()=>realOpen()?closeTrip(realOpen().id):newTrip(),fuel:newFuel,gasto:newGasto,wash:newWash,nov:newNov,entry:newEntry,hours,venc:()=>venc(null),trabajo:()=>trabajo(null),factura:()=>factura(null),tema:()=>tema(null),equipo:()=>equipo(null),fijo:()=>fijo(null),barco,item:addItem,addmaq:addMaq,defmaq:()=>safe(ensureMaq,"Máquinas creadas"),sheet,start:startReal,xls:excel};
+const ACT={sync:()=>db.sync().then(()=>toast(STATUS.online?"Sincronizado":"Sin señal")),zarpe:()=>realOpen()?closeTrip(realOpen().id):newTrip(),fuel:newFuel,gasto:newGasto,wash:newWash,nov:newNov,entry:newEntry,hours,venc:()=>venc(null),trabajo:()=>trabajo(null),factura:()=>factura(null),tema:()=>tema(null),equipo:()=>equipo(null),fijo:()=>fijo(null),pieza:()=>newCambio(),plan:()=>plan(null),plansug:planSug,notif:pedirAvisos,barco,item:addItem,addmaq:addMaq,defmaq:()=>safe(ensureMaq,"Máquinas creadas"),sheet,start:startReal,xls:excel};
 document.addEventListener("click",e=>{const g=e.target.closest("[data-go]");if(g){go(g.dataset.go);return}
   const vw=e.target.closest("[data-view]");if(vw){go(vw.dataset.view);return}
   const c=e.target.closest("[data-tipo]");if(c){fTipo=c.dataset.tipo;render();return}
@@ -471,6 +564,7 @@ document.addEventListener("click",e=>{const g=e.target.closest("[data-go]");if(g
   if(t.id==="mPrev"){curM=addM(curM,-1);render();return}if(t.id==="mNext"){curM=addM(curM,1);render();return}
   if(t.id==="wPrev"||t.id==="wNext"){const d=new Date(curW+"T00:00:00");d.setDate(d.getDate()+(t.id==="wPrev"?-7:7));curW=iso(d);render();return}
   if(t.id==="bSet"){go("ajustes");return}if(t.id==="fab"){sheet();return}
+  if(t.dataset.feq!=null){fEq=t.dataset.feq;render();return}
   if(!db)return;
   if(t.dataset.act){if(t.closest("#sheet"))$("#sheet").close();const f=ACT[t.dataset.act];if(f)f(t.dataset.vid);return}
   if(t.dataset.del)armDelete(t);
@@ -502,11 +596,32 @@ document.addEventListener("click",e=>{const g=e.target.closest("[data-go]");if(g
   if(t.dataset.qed)tema(t.dataset.qed);
   if(t.dataset.qeq)equipo(t.dataset.qeq);
   if(t.dataset.serv){const m=t.dataset.serv;markService(m)}
+  if(t.dataset.phecho)planHecho(t.dataset.phecho);
+  if(t.dataset.pedit)plan(t.dataset.pedit);
+  if(t.dataset.tdoc)addDoc(t.dataset.tdoc);
+  if(t.dataset.tdocdel){const[v,i]=t.dataset.tdocdel.split("|");quitarDoc(v,i)}
   if(t.dataset.rv){const[i,v]=t.dataset.rv.split("|");const cur=(revDoc(curW).items||{})[i]||{};setRev(curW,i,{estado:cur.estado===v?"":v})}});
 document.addEventListener("change",e=>{const t=e.target;if(t.id==="vYear"){curY=t.value;render()}if(t.dataset&&t.dataset.rn&&db)setRev(curW,t.dataset.rn,{nota:t.value.trim()})});
 document.addEventListener("input",e=>{if(e.target.id==="fq"){log.q=e.target.value;const pos=e.target.selectionStart;render();const f=$("#fq");f.focus();try{f.setSelectionRange(pos,pos)}catch(_){}}});
 
 
+
+/* ================= avisos en el teléfono =================
+   Una vez al día por cada mantenimiento, servicio o papel que se acerca o venció.
+   Se calculan en el teléfono al abrir la app o al sincronizar. */
+const puedeAvisar=()=>"Notification" in window;
+const avisosOn=()=>puedeAvisar()&&Notification.permission==="granted";
+async function pedirAvisos(){if(!puedeAvisar()){toast("Este navegador no permite avisos. En iPhone, primero agrega la app a la pantalla de inicio.");return}
+  const r=await Notification.requestPermission();if(r==="granted"){toast("Avisos activados en este teléfono");avisar()}else toast("Avisos desactivados. Se pueden activar en los ajustes del teléfono.");render()}
+let avisando=false;
+async function avisar(){if(avisando||!avisosOn()||!S.ready)return;avisando=true;
+  try{const hoy=today();let st={};try{st=JSON.parse(localStorage.getItem("cs_avisos")||"{}")}catch(e){}if(st.dia!==hoy)st={dia:hoy,k:[]};
+    const A=alerts().filter(a=>a.c&&["Mantenimiento","Servicio","Papeles"].includes(a.e));const N=A.filter(a=>!st.k.includes(a.k||a.t));if(!N.length)return;
+    const reg=navigator.serviceWorker?await navigator.serviceWorker.getRegistration().catch(()=>null):null;
+    const show=(t,body,tag)=>reg?reg.showNotification(t,{body,tag,icon:"/icon-192.png",badge:"/icon-192.png",data:{url:"/"}}):new Notification(t,{body,tag,icon:"/icon-192.png"});
+    if(N.length>2)await show("Cay Sarah: "+N.length+" mantenimientos por atender",N.slice(0,4).map(a=>a.t).join(" · ")+(N.length>4?"…":""),"cs-resumen");
+    else for(const a of N)await show(a.t,a.d,a.k||a.t);
+    st.k.push(...N.map(a=>a.k||a.t));localStorage.setItem("cs_avisos",JSON.stringify(st))}catch(e){console.warn(e)}finally{avisando=false}}
 
 /* ================= recibos y equipo ================= */
 async function comprimir(file){try{const img=await createImageBitmap(file);const k=Math.min(1,1600/Math.max(img.width,img.height));const c=document.createElement("canvas");c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);c.getContext("2d").drawImage(img,0,0,c.width,c.height);return await new Promise(r=>c.toBlob(b=>r(b||file),"image/jpeg",.8))}catch(e){return file}}
@@ -550,10 +665,13 @@ export async function mount(store, ctx) {
       const a = document.activeElement;
       if (a && (a.id === "fq" || a.dataset?.rn)) return; // no interrumpir mientras escribe
       render();
+      setTimeout(avisar,1500);
     });
   };
   render();
-  setInterval(() => { if (view === "hoy" && drying()) render(); }, 60000);
+  setInterval(() => { if (view === "hoy" && drying()) render(); avisar(); }, 60000);
+  setTimeout(avisar, 3000);
   await store.start();
+  avisar();
   cargarEquipo();
 }

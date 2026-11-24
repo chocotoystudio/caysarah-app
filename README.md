@@ -33,3 +33,12 @@ Todos entran con el código de su puesto (Dueño, Capitán, Tripulación). El te
 - El dueño crea, cambia o elimina códigos en Ajustes › Accesos del equipo. Al cambiar un código, los teléfonos que entraron con el anterior pierden el acceso y la app borra los datos guardados en ellos.
 - Los datos pertenecen al barco, no a la persona.
 - Si se pierde el código de dueño: en el SQL Editor, `select puesto, codigo from codigos;`
+
+## Mantenimiento por tiempo, piezas y zarpes (migración 0003)
+
+Ejecutar `supabase/migrations/0003_zarpe_piezas_planes.sql` **antes** de publicar esta versión: agrega columnas a `viajes` y `entradas` y la tabla `planes`.
+
+- **Zarpe**: tipo de salida *Préstamo*, número de zarpe, desde → hacia y documentos (zarpe, listas, despacho…) guardados en el viaje.
+- **Cambios de piezas**: fecha, equipo, pieza, costo y foto. Aparecen en Mantenimiento › Cambios de piezas, filtrables por equipo, y en la Bitácora.
+- **Mantenimiento por tiempo** (`planes`): cada N días, semanas, meses o años desde la última vez. «Sugeridos» carga un plan de referencia (extintores, aires, balsa, desalinizadora, casco…) que se ajusta a cada fabricante.
+- **Avisos**: lo que se acerca o venció sale en Hoy › Atención y, si se activan los avisos del teléfono (Ajustes), como notificación una vez al día al abrir la app.

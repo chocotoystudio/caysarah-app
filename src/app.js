@@ -126,8 +126,21 @@ function render(){
   const banner=(!STATUS.online?`<div class="offline">Sin señal. Todo lo que registres se guarda en el teléfono y se envía al volver la conexión${STATUS.pending?" ("+STATUS.pending+" pendientes)":""}.</div>`:"")+(STATUS.error?`<div class="offline">${esc(STATUS.error)}</div>`:"")+(S.ready&&!S.maquinas.length&&!S.viajes.length&&ROL!=="tripulacion"?`<div class="demo"><span><b>Bitácora nueva.</b> Empieza creando los motores y registrando las horas actuales.</span><button class="btn sm" data-act="start">Configurar el barco</button></div>`:"");
   const V={hoy:vHoy,viajes:vViajes,mant:vMant,fin:vFin,barco:vBarco,log:vLog,ajustes:vAjustes}[view]||vHoy;
   $("#main").innerHTML=`<div class="view">${banner}${S.ready?V():`<p class="empty">Cargando la bitácora…</p>`}</div>`;
+  montarFondoHero();
   $("#fab").disabled=!db;
 }
+
+/* ---------- fondo del hero: video del catamarán ----------
+   Un solo <video> que se reubica en cada render. Moverlo dentro de la misma tarea no lo pausa,
+   así que no se reinicia cada vez que cambia un dato. Con movimiento reducido o ahorro de datos
+   solo se muestra la foto. */
+let heroVid=null;
+function montarFondoHero(){const h=$("#main .hero");if(!h)return;
+  if(!heroVid){const v=document.createElement("video");v.className="hero-bg";v.poster="/hero/catamaran-hero.jpg";
+    v.muted=true;v.loop=true;v.playsInline=true;v.preload="metadata";v.setAttribute("muted","");v.setAttribute("playsinline","");v.setAttribute("aria-hidden","true");v.tabIndex=-1;
+    const calma=matchMedia("(prefers-reduced-motion: reduce)").matches||(navigator.connection&&navigator.connection.saveData);
+    if(!calma){v.autoplay=true;v.src="/hero/catamaran-hero.mp4"}heroVid=v}
+  h.classList.add("media");h.prepend(heroVid);if(heroVid.src&&heroVid.paused)heroVid.play().catch(()=>{})}
 
 /* ---------- HOY ---------- */
 function vHoy(){const ot=tripOpen()[0],b=X().barco||{};const d=new Date();

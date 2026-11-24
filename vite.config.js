@@ -24,7 +24,8 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
+        // La foto del hero se guarda para verla sin señal; el video (.mp4) no se precarga y se pide solo en línea.
+        globPatterns: ["**/*.{js,css,html,svg,png,jpg,woff2}"],
         navigateFallback: "/index.html",
         runtimeCaching: [
           { urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i, handler: "CacheFirst", options: { cacheName: "fuentes", expiration: { maxEntries: 20, maxAgeSeconds: 31536000 } } },

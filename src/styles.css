@@ -359,3 +359,11 @@ body.gate .top,body.gate .app,body.gate .tabbar,body.gate .fab{display:none}
 @media (max-width:520px){.ci{grid-template-columns:46px minmax(0,1fr)}.ci .cx{grid-column:2;justify-content:flex-start}}
 .fotol{display:inline-flex;align-items:center}
 .tacts .btn svg{width:15px;height:15px;margin-right:4px;vertical-align:-3px}
+
+/* manual del fabricante */
+.manual .grid2{gap:18px;margin-bottom:6px}
+.mh{font-family:var(--display);font-size:10px;font-weight:400;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
+.mlist{margin:0;padding-left:18px;display:grid;gap:4px;font-size:13.5px;line-height:1.4}
+.mdet{border-top:1px solid var(--line);padding:10px 0}
+.mdet summary{cursor:pointer;font-size:13px;font-weight:700}
+.mdet[open] summary{margin-bottom:8px}

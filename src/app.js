@@ -1,6 +1,7 @@
 // Bitácora Cay Sarah · interfaz. Portada del prototipo; los datos pasan por store.js (local + Supabase).
 import { supabase } from "./supabase.js";
 import { newId } from "./store.js";
+import { MANUAL, PLAN_MANUAL } from "./manual.js";
 
 let USER = {}, EQUIPO = { miembros: [], codigos: [] };
 const ROLES = { dueno: "Dueño", capitan: "Capitán", tripulacion: "Tripulación" };
@@ -75,7 +76,7 @@ const TIPOV=["Charter","Uso del dueño","Préstamo","Traslado","Prueba o manteni
 const DOCS_ZARPE=["Zarpe","Lista de tripulantes","Lista de pasajeros","Despacho de capitanía","Permiso de navegación","Contrato o acuerdo","Otro"];
 /* mantenimiento por tiempo */
 const UNI={dias:["día","días"],semanas:["semana","semanas"],meses:["mes","meses"],anios:["año","años"]};
-const SISTEMAS=["Seguridad","Climatización","Agua","Casco y propulsión","Eléctrico","Sanitarios","Tender","Cubierta","Otro"];
+const SISTEMAS=["Seguridad","Climatización","Agua","Casco y propulsión","Propulsión y gobierno","Combustible","Eléctrico","Sanitarios","Tender","Cubierta","Otro"];
 const EQUIPOS_BASE=["Desalinizadora","Aire acondicionado","Bomba de agua dulce","Bomba de achique","Sanitarios","Calentador de agua","Baterías","Cargador e inversor","Molinete","Tender","Fuera de borda","Casco","Hélices y ejes","Cocina y nevera","Electrónica","Otro"];
 /* Plan recomendado: intervalos de referencia habituales en barcos de este tipo; cada barco los ajusta según el fabricante y el uso. */
 const PLAN_SUG=[
@@ -96,7 +97,8 @@ const PLAN_SUG=[
   ["Baterías: prueba de capacidad","Eléctrico",12,"meses",30],
   ["Inodoros: bombas y válvulas","Sanitarios",6,"meses",15],
   ["Molinete: limpieza y engrase","Cubierta",6,"meses",15],
-  ["Tender: servicio del fuera de borda","Tender",6,"meses",15]];
+  ["Tender: servicio del fuera de borda","Tender",6,"meses",15],
+  ...PLAN_MANUAL];
 const ZONAS=["Casco y cubierta","Interior","Motores con agua dulce","Tender","Lona y cojines"];
 const DEF_MAQ=[
   {clave:"babor",nombre:"Motor babor",orden:1,tareas:[{t:"Aceite y filtro",cada:250},{t:"Filtros Racor",cada:250},{t:"Impeller agua salada",cada:500},{t:"Ánodos intercambiador",cada:500}]},
@@ -331,7 +333,22 @@ function vBarco(){const b=S.barco||{};const fin=FIN();
     <section class="card"><div class="ch"><h2>Ficha técnica</h2>${db&&fin?`<button class="btn sm" data-ficha="all">Editar todo</button>`:""}</div>${ficha||`<p class="empty">Carga matrícula, MMSI, eslora y los datos del registro naval tal como aparecen en los certificados.</p>`}</section>
     <section class="card"><div class="ch"><div><h2>Radio y navegación</h2><p class="sub">Certificado de seguridad radiotelefónica</p></div>${db&&fin?`<button class="btn sm" data-act="equipo">Añadir</button>`:""}</div>
       ${X().equipos.length?[...X().equipos].sort((a,c)=>(+a.orden||99)-(+c.orden||99)).map(q=>`<div class="vc"><div><span class="vt">${esc(q.elemento)}</span><small>${[[q.fabricante,q.modelo].filter(Boolean).join(" "),q.potencia,q.frecuencia].filter(Boolean).map(esc).join(" · ")||"Sin datos"}</small>${db&&fin?`<span style="display:flex;gap:12px"><button class="link" data-qeq="${esc(q.id)}">Editar</button><button class="link danger" data-del="equipos/${esc(q.id)}">Eliminar</button></span>`:""}</div></div>`).join(""):`<p class="empty">VHF, AIS, radar, EPIRB, GPS…</p>`}</section>
-  </div>`}
+  </div>
+  ${vManual()}`}
+/* ---------- manual del fabricante ---------- */
+const lista=L=>`<ul class="mlist">${L.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`;
+function vManual(){const M=MANUAL,falta=fichaManual().length;
+  return `<section class="card manual"><div class="ch"><div><h2>Manual del fabricante</h2><p class="sub">${esc(M.titulo)} · ${esc(M.fuente)}</p></div>${db&&FIN()&&falta?`<button class="btn sm" data-act="fichaman">Completar ficha (${falta})</button>`:""}</div>
+    <div class="grid2"><div><h3 class="mh">Antes de cada salida</h3>${lista(M.prezarpe)}</div><div><h3 class="mh">Incendio en sala de máquinas</h3><ol class="mlist">${M.incendio.map(x=>`<li>${esc(x)}</li>`).join("")}</ol></div></div>
+    ${M.specs.map(([g,L])=>`<details class="mdet"><summary>${esc(g)}</summary><dl class="info">${L.map(([l,v])=>`<div><dt>${esc(l)}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl></details>`).join("")}
+    <details class="mdet"><summary>Reglas a bordo</summary>${lista(M.reglas)}</details>
+    <details class="mdet"><summary>Pasacascos y tomas de mar</summary>${lista(M.pasacascos)}</details></section>`}
+/* Campos de la ficha que el manual puede llenar; solo los que están vacíos */
+const FICHA_MANUAL=[["modelo","Aquila 44",1],["eslora","13,32 m"],["manga","6,56 m"],["puntal","2,76 m"],["hin","SEU44074I819"],["capacidad","8 personas (categoría A)"],["velocidad","23 nudos (máx. de diseño)"],["combustible","1.100 L (2 × 550 L)",1],["agua","780 L (2 × 390 L)"]];
+function fichaManual(){const b=S.barco||{};return FICHA_MANUAL.filter(([k,,col])=>!String(fv(b,k,col)??"").trim())}
+function completarFicha(){const L=fichaManual();if(!L.length){toast("La ficha ya tiene esos datos.");return}
+  dialog("Completar ficha con el manual",[{hint:"Se llenan solo los campos vacíos. El serial del casco sale de la declaración de conformidad: compáralo con la placa del barco."},...L.map(([k,v])=>({hint:(FICHA.flatMap(x=>x[1]).find(x=>x[0]===k)||[,k])[1]+": "+v}))],{},
+    ()=>{const b=S.barco||{},p={},fi={...(b.ficha||{})};L.forEach(([k,v,col])=>{if(col)p[k]=v;else fi[k]=v});p.ficha=fi;safe(()=>updBarco(p),"Ficha completada")},"Completar")}
 function trabajo(id){const w=id?S.trabajos.find(x=>x.id===id):{fecha:today(),estado:"Completado",categoria:"Mecánica"};if(id&&!w)return;
   dialog(id?"Editar trabajo":"Registrar trabajo",[{k:"fecha",l:"Fecha",t:"date",req:1},{k:"monto",l:"Monto (USD)",t:"number",req:1},{k:"titulo",l:"Qué se hizo",full:1,req:1,ph:"Ej. Cambio de impelers en ambos motores"},{k:"categoria",l:"Área",t:"select",o:AREAS},{k:"proveedor",l:"Proveedor"},{k:"lugar",l:"Lugar",ph:"Ej. Lechería, Anzoátegui"},{k:"horas",l:"Horas de motor",ph:"Ej. 1.240 / 1.236"},{k:"factura",l:"N.º de factura"},{k:"estado",l:"Estado",t:"select",o:["Completado","En curso","Programado"]},{k:"detalle",l:"Detalle",t:"textarea",full:1,ph:"Repuestos, observaciones, garantía…"}],w,
   o=>{o.monto=+o.monto||0;safe(()=>id?patch("trabajos",id,o):put("trabajos",o),id?"Trabajo actualizado":"Trabajo registrado")})}
@@ -486,9 +503,9 @@ function planHecho(id){const p=S.planes.find(x=>x.id===id);if(!p)return;
       if(C>0)await put("gastos",{fecha:o.fecha,concepto:p.nombre,tipo:"Mantenimiento",categoria:o.pieza?"Repuestos":"Mano de obra",monto:C,entradaId:ref.id,creado:stamp()})},"Registrado. Próximo: "+fdate(addInt(o.fecha||today(),p.cada,p.unidad))),"Guardar")}
 function planSug(){const ya=new Set(S.planes.map(p=>(p.nombre||"").toLowerCase()));const F=PLAN_SUG.filter(x=>!ya.has(x[0].toLowerCase()));
   if(!F.length){toast("Ya tienes todos los sugeridos. Usa «Añadir» para otros.");return}
-  dialog("Plan recomendado",[{hint:"Intervalos de referencia habituales; ajústalos a lo que indique cada fabricante. Después anota en cada uno la fecha de la última vez."},
-    {k:"cual",l:"Qué agregar",t:"select",full:1,o:[{v:"todos",l:"Todos los que faltan ("+F.length+")"},...F.map((x,i)=>({v:String(i),l:x[0]+" · cada "+(x[2]===1?UNI[x[3]][0]:x[2]+" "+UNI[x[3]][1])}))]}],{cual:"todos"},
-    o=>{const L=o.cual==="todos"?F:[F[+o.cual]];safe(async()=>{let n=S.planes.length;for(const[nombre,sistema,cada,unidad,aviso]of L)await put("planes",{nombre,sistema,cada,unidad,aviso,ultimo:null,activo:true,orden:++n})},L.length===1?"Agregado":"Agregados "+L.length+" mantenimientos")},"Agregar")}
+  dialog("Plan recomendado",[{hint:"Incluye lo que pide el manual del Aquila 44 (marcado «Manual») e intervalos de referencia habituales. Ajústalos a cada fabricante y anota en cada uno la fecha de la última vez."},
+    {k:"cual",l:"Qué agregar",t:"select",full:1,o:[{v:"todos",l:"Todos los que faltan ("+F.length+")"},...F.map((x,i)=>({v:String(i),l:(x[5]?"Manual · ":"")+x[0]+" · cada "+(x[2]===1?UNI[x[3]][0]:x[2]+" "+UNI[x[3]][1])}))]}],{cual:"todos"},
+    o=>{const L=o.cual==="todos"?F:[F[+o.cual]];safe(async()=>{let n=S.planes.length;for(const[nombre,sistema,cada,unidad,aviso,nota]of L)await put("planes",{nombre,sistema,cada,unidad,aviso,nota:nota||null,ultimo:null,activo:true,orden:++n})},L.length===1?"Agregado":"Agregados "+L.length+" mantenimientos")},"Agregar")}
 function hours(){const M=S.maquinas.length?[...S.maquinas].sort((a,b)=>(+a.orden||9)-(+b.orden||9)):DEF_MAQ;const v={fecha:today()};M.forEach(m=>v[m.clave]=m.fecha?m.horas:"");
   dialog("Registrar horas",[{k:"fecha",l:"Fecha",t:"date",full:1,req:1},...M.map(m=>({k:m.clave,l:m.nombre+" (h)",t:"number"})),{k:"nota",l:"Nota",full:1}],v,o=>{const H={};M.forEach(m=>H[m.clave]=numOrNull(o[m.clave]));safe(async()=>{await ensureMaq();await applyHours(o.fecha,H,o.nota||"Lectura de horómetro")},"Horas registradas")})}
 function markService(mid){const m=S.maquinas.find(x=>x.id===mid);if(!m||!(m.tareas||[]).length)return;
@@ -556,7 +573,7 @@ async function excel(){const XLSX=await import("xlsx").catch(()=>null);if(!XLSX)
   const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([XLSX.write(wb,{bookType:"xlsx",type:"array"})]));a.download="Bitacora_Cay_Sarah_"+today()+".xlsx";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
 
 /* ================= eventos ================= */
-const ACT={sync:()=>db.sync().then(()=>toast(STATUS.online?"Sincronizado":"Sin señal")),zarpe:()=>realOpen()?closeTrip(realOpen().id):newTrip(),fuel:newFuel,gasto:newGasto,wash:newWash,nov:newNov,entry:newEntry,hours,venc:()=>venc(null),trabajo:()=>trabajo(null),factura:()=>factura(null),tema:()=>tema(null),equipo:()=>equipo(null),fijo:()=>fijo(null),pieza:()=>newCambio(),plan:()=>plan(null),plansug:planSug,notif:pedirAvisos,barco,item:addItem,addmaq:addMaq,defmaq:()=>safe(ensureMaq,"Máquinas creadas"),sheet,start:startReal,xls:excel};
+const ACT={fichaman:completarFicha,sync:()=>db.sync().then(()=>toast(STATUS.online?"Sincronizado":"Sin señal")),zarpe:()=>realOpen()?closeTrip(realOpen().id):newTrip(),fuel:newFuel,gasto:newGasto,wash:newWash,nov:newNov,entry:newEntry,hours,venc:()=>venc(null),trabajo:()=>trabajo(null),factura:()=>factura(null),tema:()=>tema(null),equipo:()=>equipo(null),fijo:()=>fijo(null),pieza:()=>newCambio(),plan:()=>plan(null),plansug:planSug,notif:pedirAvisos,barco,item:addItem,addmaq:addMaq,defmaq:()=>safe(ensureMaq,"Máquinas creadas"),sheet,start:startReal,xls:excel};
 document.addEventListener("click",e=>{const g=e.target.closest("[data-go]");if(g){go(g.dataset.go);return}
   const vw=e.target.closest("[data-view]");if(vw){go(vw.dataset.view);return}
   const c=e.target.closest("[data-tipo]");if(c){fTipo=c.dataset.tipo;render();return}

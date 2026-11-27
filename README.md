@@ -42,3 +42,10 @@ Ejecutar `supabase/migrations/0003_zarpe_piezas_planes.sql` **antes** de publica
 - **Cambios de piezas**: fecha, equipo, pieza, costo y foto. Aparecen en Mantenimiento › Cambios de piezas, filtrables por equipo, y en la Bitácora.
 - **Mantenimiento por tiempo** (`planes`): cada N días, semanas, meses o años desde la última vez. «Sugeridos» carga un plan de referencia (extintores, aires, balsa, desalinizadora, casco…) que se ajusta a cada fabricante.
 - **Avisos**: lo que se acerca o venció sale en Hoy › Atención y, si se activan los avisos del teléfono (Ajustes), como notificación una vez al día al abrir la app.
+
+## Manual del fabricante (Aquila 44)
+
+`src/manual.js` guarda los datos del manual del propietario (Hangzhou Sino Eagle, edición 1 jul 2018): especificaciones, tanques, baterías, achique, pasacascos, lista antes de zarpar, procedimiento de incendio y reglas a bordo. No necesita migración.
+
+- **Barco › Manual del fabricante**: consulta rápida a bordo. «Completar ficha» llena solo los campos vacíos de la ficha técnica (eslora, manga, puntal, serial del casco, capacidad, combustible, agua).
+- **Mantenimiento › Sugeridos**: añade las tareas que pide el manual (prefiltro de combustible anual, purga del decantador, limpieza del tanque cada 5 años, inspección eléctrica cada 2 años, baterías, tomas de mar, dirección, cables, extinción fija, acero inoxidable), marcadas «Manual» y con la nota de lo que dice el manual.
